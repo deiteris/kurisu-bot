@@ -43,7 +43,7 @@ def get_time_of_day(hour):
 async def on_command_error(ecx, ctx):
     if isinstance(ecx, commands.errors.CommandNotFound):
         await ctx.bot.send_message(ctx.message.channel, "I don't understand. Try `Kurisu, help`, baka!")
-    if isinstance(ecx, discord.ext.commands.errors.MissingRequiredArgument):
+    if isinstance(ecx, commands.errors.MissingRequiredArgument):
         formatter = commands.formatter.HelpFormatter()
         await bot.send_message(ctx.message.channel, "You are missing required arguments. See the usage:\n{}".format(formatter.format_help_for(ctx, ctx.command)[0]))
 

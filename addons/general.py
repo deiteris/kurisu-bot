@@ -3,8 +3,9 @@ import asyncio
 import re
 import wolframalpha
 import json
+import discord
 from discord.ext import commands
-from random import uniform
+from random import uniform, randrange
 
 
 class General:
@@ -43,6 +44,24 @@ class General:
     async def divergence(self):
         numbers = uniform(0, 10)
         await self._send(str(numbers))
+
+    # Commands
+    @commands.command(pass_context=True, hidden=True)
+    async def pinquote(self, ctx):
+        pins_list = []
+        pins_attachment_list = []
+        pins = await self.bot.pins_from(ctx.message.channel)
+        for pin in pins:
+            try:
+                if pin.attachments:
+                    for attachment in pin.attachments:
+                        pins_attachment_list.append(attachment)
+                    pins_list.append(pin.content)
+            except discord.HTTPException as e:
+                print('Pin {} failed to load.'.format(e))
+        i = randrange(0, len(pins_list))
+
+        await self._send(pins_attachment_list[i]['url'] + pins_list[i])
 
     @commands.command(hidden=True)
     async def google(self, *, text: str):
