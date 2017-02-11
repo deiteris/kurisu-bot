@@ -1,0 +1,19 @@
+{
+	"token": "",
+	"owner": "",
+	"wolfram": "",
+	"extensions": [
+		{
+			"name": "addons.general"
+		},
+		{
+			"name": "addons.memes"
+		},
+		{
+			"name": "addons.playsound"
+		},
+		{
+			"name": "addons.service"
+		}
+	]
+}
