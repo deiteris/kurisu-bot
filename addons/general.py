@@ -40,11 +40,6 @@ class General:
 
     # Commands
     @commands.command(hidden=True)
-    async def server(self):
-        numbers = uniform(0, 10)
-        await self._send(str(numbers))
-
-    @commands.command(hidden=True)
     async def divergence(self):
         numbers = uniform(0, 10)
         await self._send(str(numbers))
