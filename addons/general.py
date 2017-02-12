@@ -48,6 +48,7 @@ class General:
     # Commands
     @commands.command(pass_context=True, hidden=True)
     async def pinquote(self, ctx):
+        # Made in complex but simply works!
         pins_list = []
         pins_attachment_list = []
         pins = await self.bot.pins_from(ctx.message.channel)
@@ -56,12 +57,17 @@ class General:
                 if pin.attachments:
                     for attachment in pin.attachments:
                         pins_attachment_list.append(attachment)
-                    pins_list.append(pin.content)
+                else:
+                    pins_attachment_list.append(0)
+                pins_list.append(pin.content)
             except discord.HTTPException as e:
                 print('Pin {} failed to load.'.format(e))
         i = randrange(0, len(pins_list))
 
-        await self._send(pins_attachment_list[i]['url'] + pins_list[i])
+        if pins_attachment_list[i] != 0:
+            await self._send('{}\n{}'.format(pins_attachment_list[i]['url'], pins_list[i]))
+        else:
+            await self._send(pins_list[i])
 
     @commands.command(hidden=True)
     async def google(self, *, text: str):
