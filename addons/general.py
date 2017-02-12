@@ -52,18 +52,24 @@ class General:
         pins_list = []
         pins_attachment_list = []
         pins = await self.bot.pins_from(ctx.message.channel)
+        # Get pins
         for pin in pins:
             try:
+                # Check if we have attachments for a pin
                 if pin.attachments:
                     for attachment in pin.attachments:
+                        # Add image to pins_attachment_list array
                         pins_attachment_list.append(attachment)
                 else:
+                    # Keep arrays equal. Fill space with zero.
                     pins_attachment_list.append(0)
+                # Add message to pins_list array
                 pins_list.append(pin.content)
             except discord.HTTPException as e:
                 print('Pin {} failed to load.'.format(e))
         i = randrange(0, len(pins_list))
 
+        # Since we have equal arrays we can simply check if the same array index has zero and respond accordingly
         if pins_attachment_list[i] != 0:
             await self._send('{}\n{}'.format(pins_attachment_list[i]['url'], pins_list[i]))
         else:
