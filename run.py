@@ -8,6 +8,7 @@
 import os
 import discord
 import json
+import sqlite3
 from discord.ext import commands
 from random import randrange
 from datetime import datetime
@@ -28,6 +29,10 @@ with open('config.json') as data:
 prefixes = commands.when_mentioned_or('Kurisu, ', 'kurisu, ', 'Kurisu ', 'kurisu ')
 bot = commands.Bot(command_prefix=prefixes, description=description, pm_help=None)
 bot.pruning = False  # used to disable leave logs if pruning, maybe.
+# Initialize db connection
+bot.db = sqlite3.connect('main.db')
+# TODO: This might option might affect all servers
+bot.wiki_lang_opt = 'en'
 
 
 def get_time_of_day(hour):
@@ -42,7 +47,7 @@ def get_time_of_day(hour):
 @bot.event
 async def on_command_error(ecx, ctx):
     if isinstance(ecx, commands.errors.CommandNotFound):
-        await ctx.bot.send_message(ctx.message.channel, "I don't understand. Try `Kurisu, help`, baka!")
+        await bot.send_message(ctx.message.channel, "I don't understand. Try `Kurisu, help`, baka!")
     if isinstance(ecx, commands.errors.MissingRequiredArgument):
         formatter = commands.formatter.HelpFormatter()
         await bot.send_message(ctx.message.channel, "You are missing required arguments. See the usage:\n{}".format(formatter.format_help_for(ctx, ctx.command)[0]))
@@ -60,7 +65,7 @@ async def on_member_update(before, after):
 @bot.event
 async def on_member_join(member):
     if str(member.bot) != "True":
-        await bot.send_message(member.server.default_channel, "http://i.imgur.com/8GNTOiZ.jpg\nLabomem {} has joined our laboratory.".format(str.capitalize(member.name)))
+        await bot.send_message(member.server.default_channel, "Labomem {} has joined our laboratory.\nhttp://i.imgur.com/HYBdoFe.png".format(str.capitalize(member.name)))
 
 
 @bot.event

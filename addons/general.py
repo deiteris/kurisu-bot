@@ -9,7 +9,6 @@ from random import uniform, randrange
 
 
 class General:
-
     """
     General Chat Commands
     """
@@ -41,13 +40,18 @@ class General:
 
     # Commands
     @commands.command(hidden=True)
+    async def server(self):
+        numbers = uniform(0, 10)
+        await self._send(str(numbers))
+
+    @commands.command(hidden=True)
     async def divergence(self):
         numbers = uniform(0, 10)
         await self._send(str(numbers))
 
     # Commands
     @commands.command(pass_context=True, hidden=True)
-    async def pinquote(self, ctx):
+    async def randompin(self, ctx):
         # Made in complex but simply works!
         pins_list = []
         pins_attachment_list = []
@@ -61,6 +65,8 @@ class General:
                         # Add image to pins_attachment_list array
                         pins_attachment_list.append(attachment)
                 else:
+                    # TODO: Usually we deal with only one attachment per message, so it will work perfectly.
+                    # TODO: But what if we have more than one in the same message... Is it even possible?
                     # Keep arrays equal. Fill space with zero.
                     pins_attachment_list.append(0)
                 # Add message to pins_list array
@@ -71,7 +77,7 @@ class General:
 
         # Since we have equal arrays we can simply check if the same array index has zero and respond accordingly
         if pins_attachment_list[i] != 0:
-            await self._send('{}\n{}'.format(pins_attachment_list[i]['url'], pins_list[i]))
+            await self._send('{1}\n{0}'.format(pins_attachment_list[i]['url'], pins_list[i]))
         else:
             await self._send(pins_list[i])
 
@@ -82,8 +88,6 @@ class General:
         await self._send('http://i.imgur.com/pIp93NT.jpg')
         await asyncio.sleep(2.5)
         await self._send('Is there anything you can do by yourself?\nhttps://lmgtfy.com/?q=' + query)
-
-    _wiki_lang_opt = 'en'
 
     # Credits to NotSoSuper#8800
     # https://github.com/NotSoSuper/NotSoBot
@@ -129,7 +133,7 @@ class General:
 
     @wiki.command(name="search", hidden=True)
     async def _wiki_search(self, *, query: str):
-        wikipedia.set_lang(self._wiki_lang_opt)
+        wikipedia.set_lang(self.bot.wiki_lang_opt)
         try:
             msg = wikipedia.summary('{}'.format(query), sentences=10).strip()
         except wikipedia.exceptions.DisambiguationError as e:
@@ -139,8 +143,8 @@ class General:
 
     @wiki.command(name="lang", hidden=True)
     async def _wiki_lang(self, lang: str):
-        self._wiki_lang_opt = '{}'.format(lang)
-        await self._send("```Wiki language has been set to " + self._wiki_lang_opt + "```")
+        self.bot.wiki_lang_opt = '{}'.format(lang)
+        await self._send("```Wiki language has been set to " + self.bot.wiki_lang_opt + "```")
 
 
 def setup(bot):
