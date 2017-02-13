@@ -5,7 +5,7 @@
 # Made just for fun, feel free to use
 
 # Import dependencies
-import os
+import os, sys
 import discord
 import json
 import sqlite3
@@ -15,7 +15,9 @@ from datetime import datetime
 
 
 description = """
-Kurisu Makise experimental bot.
+ハロー, my name is Kurisu Makise.
+
+Here is the list of available commands:
 """
 
 # Set working directory to bot's folder
@@ -27,12 +29,19 @@ bot = commands.Bot(command_prefix=prefixes, description=description, pm_help=Non
 bot.pruning = False  # used to disable leave logs if pruning, maybe.
 
 # Read config
+if not os.path.isfile("config.json"):
+    sys.exit("Set up your config.json file first!")
+
 with open('config.json') as data:
     bot.config = json.load(data)
 
+if not os.path.isfile("log.txt"):
+    with open("log.txt", "w") as log:
+        log.write("Log start\nFormat: Server:Channel -- [timestamp]: name - content | attachment url\n")
+
 # Initialize db connection
 bot.db = sqlite3.connect('main.db')
-# TODO: This might option might affect all servers
+# TODO: This might option might be affected on all servers
 bot.wiki_lang_opt = 'en'
 
 
@@ -81,6 +90,16 @@ async def on_message(message):
         return
 
     channel = message.channel
+    server = message.author.server
+
+    # Log section
+    with open("log.txt", "a") as log:
+        if message.attachments:
+            for attachment in message.attachments:
+                attachment_url = attachment['url']
+            log.write('{}:{} -- [{}]: {} - {} | {}\n'.format(server, channel, message.timestamp, message.author, message.clean_content, attachment_url))
+        else:
+            log.write('{}:{} -- [{}]: {} - {}\n'.format(server, channel, message.timestamp, message.author, message.clean_content))
 
     # TODO: Probably needs to be done in some other way...
     if "Kurisu" == message.content:
