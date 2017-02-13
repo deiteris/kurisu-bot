@@ -1,5 +1,5 @@
-from discord.ext import commands
 import asyncio
+from discord.ext import commands
 from random import randrange
 
 
@@ -13,12 +13,12 @@ class Play:
         self.bot = bot
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
-    # Execute
-    async def _send(self, msg):
+    # Send message
+    async def send(self, msg):
         await self.bot.say(msg)
 
     # TODO: Requires some tweaking to match channel permissions (if muted, afk and etc)
-    async def _play_sound(self, msg, snd):
+    async def play_sound(self, msg, snd):
         vc = msg.author.voice_channel
         if str(vc) == "None":
             await self.bot.send_message(msg.channel, "`Connect to voice channel first!`")
@@ -46,7 +46,7 @@ class Play:
             msg += row[0] + "\n"
         msg += "random\n"
         msg += "```"
-        await self._send(msg)
+        await self.send(msg)
 
     @commands.command(pass_context=True)
     async def play(self, ctx, name: str):
@@ -59,16 +59,15 @@ class Play:
             for row in data:
                 snd.append(row[0])
             i = randrange(0, len(snd))
-            db.close()
 
-            await self._play_sound(ctx.message, snd[i])
+            await self.play_sound(ctx.message, snd[i])
         else:
             db.execute("SELECT * FROM sounds WHERE name=?", (name,))
             row = db.fetchone()
             snd = row[0]
-            db.close()
 
-            await self._play_sound(ctx.message, snd)
+            await self.play_sound(ctx.message, snd)
+        db.close()
 
 
 def setup(bot):

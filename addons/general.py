@@ -2,7 +2,6 @@ import wikipedia
 import asyncio
 import re
 import wolframalpha
-import json
 import discord
 from discord.ext import commands
 from random import uniform, randrange
@@ -18,35 +17,22 @@ class General:
         self.bot = bot
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
-    # Read config
-    with open('config.json') as _data:
-        _config = json.load(_data)
-
-    # Execute
-    async def _send(self, msg):
+    # Send message
+    async def send(self, msg):
         await self.bot.say(msg)
 
-    # List commands
-    @commands.command(name="general", pass_context=True)
-    async def _general(self):
-        """List general commands."""
-        funcs = dir(self)
-        msg = "```List of {} commands:\n".format(self.__class__.__name__)
-        for func in funcs:
-            if func != "bot" and func[0] != "_":
-                msg += func + "\n"
-        msg += "```"
-        await self._send(msg)
-
     # Commands
-    @commands.command(hidden=True)
+    @commands.command()
     async def divergence(self):
+        """Shows current wordline divergence"""
         numbers = uniform(0, 10)
-        await self._send(str(numbers))
+        divergence = str(numbers)
+        msg = "Current wordline divergence is {}".format(divergence[:8])
+        await self.send(msg)
 
-    # Commands
-    @commands.command(pass_context=True, hidden=True)
+    @commands.command(pass_context=True)
     async def randompin(self, ctx):
+        """Shows random pinned message"""
         # Made in complex but simply works!
         pins_list = []
         pins_attachment_list = []
@@ -72,26 +58,27 @@ class General:
 
         # Since we have equal arrays we can simply check if the same array index has zero and respond accordingly
         if pins_attachment_list[i] != 0:
-            await self._send('{1}\n{0}'.format(pins_attachment_list[i]['url'], pins_list[i]))
+            await self.send('{1}\n{0}'.format(pins_attachment_list[i]['url'], pins_list[i]))
         else:
-            await self._send(pins_list[i])
+            await self.send(pins_list[i])
 
-    @commands.command(hidden=True)
-    async def google(self, *, text: str):
-        """Let me google that for you"""
-        query = re.sub('\s+', '+', text)
-        await self._send('http://i.imgur.com/pIp93NT.jpg')
+    @commands.command()
+    async def google(self, *, query: str):
+        """Helps you to google. Usage: Kurisu, google <query>"""
+        msg = re.sub('\s+', '+', query)
+        await self.send('http://i.imgur.com/pIp93NT.jpg')
         await asyncio.sleep(2.5)
-        await self._send('Is there anything you can do by yourself?\nhttps://lmgtfy.com/?q=' + query)
+        await self.send('Is there anything you can do by yourself?\nhttps://lmgtfy.com/?q={}'.format(msg))
 
     # Credits to NotSoSuper#8800
     # https://github.com/NotSoSuper/NotSoBot
-    @commands.command(hidden=True)
-    async def wolfram(self, *, q: str):
-        _wa = wolframalpha.Client(self._config['wolfram'])
-        result = _wa.query(q)
+    @commands.command()
+    async def wolfram(self, *, query: str):
+        """Provides access to wolframalpha computational knowledge engine"""
+        wa = wolframalpha.Client(self.bot.config['wolfram'])
+        result = wa.query(query)
         if result['@success'] == 'false':
-            await self._send(':warning: `No results found on` <https://wolframalpha.com>')
+            await self.send(':warning: `No results found on` <https://wolframalpha.com>')
         else:
             msg = ''
             for pod in result.pods:
@@ -106,12 +93,12 @@ class General:
                     if subpod_text is None:
                         continue
                     msg += '**{0}**: `{1}`\n'.format(pod['@title'], subpod_text)
-            i = re.sub('\s+', '+', q)
+            i = re.sub('\s+', '+', query)
             msg += '**Link:** https://www.wolframalpha.com/input/?i={}'.format(i)
-            await self._send(msg)
+            await self.send(msg)
 
     # Wiki command group
-    @commands.group(pass_context=True, hidden=True)
+    @commands.group(pass_context=True)
     async def wiki(self, ctx):
         """
         Wiki command contains search and lang subcommands.
@@ -121,25 +108,24 @@ class General:
         Kurisu, wiki lang ru
         """
         if ctx.invoked_subcommand is None:
-            # I am just too lazy to do a workaround for it, so let it be.
-            msg = "```List of 'wiki' commands:\n"
-            msg += "search\nlang```"
-            await self._send(msg)
+            msg = "Have you ever tried `Kurisu, help wiki` command? I suggest you do it now..."
+            await self.send(msg)
 
-    @wiki.command(name="search", hidden=True)
-    async def _wiki_search(self, *, query: str):
+    @wiki.command(name="search")
+    async def wiki_search(self, *, query: str):
         wikipedia.set_lang(self.bot.wiki_lang_opt)
         try:
             msg = wikipedia.summary('{}'.format(query), sentences=10).strip()
         except wikipedia.exceptions.DisambiguationError as e:
             opt_list = ', '.join(e.options)
-            await self.bot.say("```Requested article wasn't found. Try to be as clear as possible.\nI have few suggestions for you: " + opt_list + "```")
-        await self._send(msg)
+            await self.send("Requested article wasn't found. Try to be as clear as possible.\n\n"
+                             "I have few suggestions for you: `{}`".format(opt_list))
+        await self.send(msg)
 
-    @wiki.command(name="lang", hidden=True)
-    async def _wiki_lang(self, lang: str):
+    @wiki.command(name="lang")
+    async def wiki_lang(self, lang: str):
         self.bot.wiki_lang_opt = '{}'.format(lang)
-        await self._send("```Wiki language has been set to " + self.bot.wiki_lang_opt + "```")
+        await self.send("`Wiki language has been set to {}`".format(self.bot.wiki_lang_opt))
 
 
 def setup(bot):

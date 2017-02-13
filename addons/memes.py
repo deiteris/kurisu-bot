@@ -11,8 +11,8 @@ class Memes:
         self.bot = bot
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
-    # Execute
-    async def _send(self, msg):
+    # Send message
+    async def send(self, msg):
         await self.bot.say(msg)
 
     # List commands
@@ -26,7 +26,7 @@ class Memes:
         for row in data:
             msg += row[0] + "\n"
         msg += "```"
-        await self._send(msg)
+        await self.send(msg)
 
     # Commands
     @commands.command()
@@ -37,7 +37,7 @@ class Memes:
         row = db.fetchone()
         msg = row[1]
         db.close()
-        await self._send(msg)
+        await self.send(msg)
 
 
 # Load the extension

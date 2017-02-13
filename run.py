@@ -22,13 +22,14 @@ Kurisu Makise experimental bot.
 dir_path = os.path.dirname(os.path.realpath(__file__))
 os.chdir(dir_path)
 
-# Read config
-with open('config.json') as data:
-    config = json.load(data)
-
 prefixes = commands.when_mentioned_or('Kurisu, ', 'kurisu, ', 'Kurisu ', 'kurisu ')
 bot = commands.Bot(command_prefix=prefixes, description=description, pm_help=None)
 bot.pruning = False  # used to disable leave logs if pruning, maybe.
+
+# Read config
+with open('config.json') as data:
+    bot.config = json.load(data)
+
 # Initialize db connection
 bot.db = sqlite3.connect('main.db')
 # TODO: This might option might affect all servers
@@ -106,11 +107,11 @@ async def on_ready():
     await bot.change_presence(game=discord.Game(name='Kurisu, help | El.Psy.Kongroo'))
 
 # Load extensions
-for extension in config['extensions']:
+for extension in bot.config['extensions']:
     try:
         bot.load_extension(extension['name'])
     except Exception as e:
         print('{} failed to load.\n{}: {}'.format(extension['name'], type(e).__name__, e))
 
 # Start bot
-bot.run(config['token'])
+bot.run(bot.config['token'])
