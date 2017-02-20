@@ -1,4 +1,5 @@
 from discord.ext import commands
+import sqlite3
 
 
 class Service:
@@ -35,14 +36,18 @@ class Service:
 
     # Temporary section for DB initialization
     # TODO: Convert db_init to set of subcommands
-    @commands.command(pass_context=True)
-    async def db_init(self, ctx):
-        """Initializes database (owner only)"""
-        # TODO: Probably I should do this check in other way...
-        if ctx.message.author.id == self.bot.config['owner']:
+    @commands.group(pass_context=True)
+    async def db(self, ctx):
+        """Database management (owner only)"""
+        if ctx.invoked_subcommand is None:
+            msg = "Have you ever tried `Kurisu, help db` command? I suggest you do it now..."
+            await self.send(msg)
 
+    @db.command(name="init", pass_context=True)
+    async def db_init(self, ctx):
+        if ctx.message.author.id == self.bot.config['owner']:
             db = self.bot.db
-            db.execute('CREATE TABLE memes (name text, image_url text)')
+            db.execute('CREATE TABLE memes (name varchar primary key, image_url text)')
             memes = [
                 ('hug', 'http://i.imgur.com/BlSC6Ek.jpg'),
                 ('experiments', 'http://i.imgur.com/Ghsr77b.jpg'),
@@ -58,7 +63,7 @@ class Service:
                 ('dio', 'http://i.imgur.com/QxxKeJ4.jpg\nYou thought it was Kurisu but it was me, DIO!'),
             ]
             db.executemany('INSERT INTO memes VALUES (?,?)', memes)
-            db.execute('CREATE TABLE sounds (name text)')
+            db.execute('CREATE TABLE sounds (name varchar primary key)')
             sounds = [
                 ('laugh',), ('upa',), ('tina',), ('shave',),
                 ('hentaikyouma',), ('timemachine',),
@@ -69,7 +74,35 @@ class Service:
             db.executemany('INSERT INTO sounds VALUES (?)', sounds)
             db.commit()
             await self.send("Database initialization complete!")
-            db.close()
+        else:
+            await self.send("Access denied.")
+
+    @db.command(name="add", pass_context=True)
+    async def db_add(self, ctx, table: str, name: str, content: str):
+        if ctx.message.author.id == self.bot.config['owner']:
+            db = self.bot.db
+            record = ('{}'.format(name), '{}'.format(content))
+            query = 'INSERT INTO {} VALUES (?,?)'.format(table)
+            try:
+                db.execute(query, record)
+                db.commit()
+                await self.send("Your record has been successfully added.")
+            except sqlite3.Error:
+                await self.send("Failed to add new record.")
+        else:
+            await self.send("Access denied.")
+
+    @db.command(name="rm", pass_context=True)
+    async def db_remove(self, ctx, table: str, name: str):
+        if ctx.message.author.id == self.bot.config['owner']:
+            db = self.bot.db
+            record = ('{}'.format(name),)
+            query = 'DELETE FROM {} WHERE name=?'.format(table)
+            if db.execute(query, record).rowcount == 0:
+                await self.send("Failed to remove this record.")
+            else:
+                db.commit()
+                await self.send("This record has been successfully removed.")
         else:
             await self.send("Access denied.")
 
