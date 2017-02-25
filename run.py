@@ -41,7 +41,7 @@ if not os.path.isfile("log.txt"):
 
 # Initialize db connection
 bot.db = sqlite3.connect('main.db')
-# TODO: This might option might be affected on all servers
+# TODO: This option might be affected on all servers
 bot.wiki_lang_opt = 'en'
 
 
@@ -85,46 +85,59 @@ async def on_member_remove(member):
 
 
 @bot.event
-async def on_message(message):
-    if message.author.bot:
+async def on_message(msg):
+    if msg.author.bot:
         return
 
-    channel = message.channel
-    server = message.author.server
+    channel = msg.channel
+
+    try:
+        server = msg.author.server
+    except AttributeError:
+        server = "No server"
 
     # Log section
     with open("log.txt", "a") as log:
-        if message.attachments:
-            for attachment in message.attachments:
+        if msg.attachments:
+            for attachment in msg.attachments:
                 attachment_url = attachment['url']
-            log.write('{}:{} -- [{}]: {} - {} | {}\n'.format(server, channel, message.timestamp, message.author, message.clean_content, attachment_url))
+            log.write('{}:{} -- [{}]: {} - {} | {}\n'.format(server, channel, msg.timestamp, msg.author, msg.clean_content, attachment_url))
         else:
-            log.write('{}:{} -- [{}]: {} - {}\n'.format(server, channel, message.timestamp, message.author, message.clean_content))
+            log.write('{}:{} -- [{}]: {} - {}\n'.format(server, channel, msg.timestamp, msg.author, msg.clean_content))
 
     # TODO: Probably needs to be done in some other way...
-    if "Kurisu" == message.content:
+    if msg.content in ("Kurisu", "kurisu"):
         opt_list = ["Yes?", "Huh?", "What's the matter?"]
         i = randrange(0, len(opt_list))
         await bot.send_message(channel, opt_list[i])
 
-    if message.content.startswith("Kurisutina"):
+    if msg.content.startswith("Kurisutina"):
         await bot.send_message(channel, "I told you there is no -tina!")
         return
 
-    if message.content.startswith("Nullpo"):
+    if msg.content in ("Nullpo", "nullpo", "Nurupo", "nurupo"):
         await bot.send_message(channel, "Gah!")
         return
 
-    await bot.process_commands(message)
+    # Don't want to mess with roles for now
+    if msg.content.startswith("<@&279725059952607233>"):
+        await bot.send_message(channel, "I am not your assistant!")
+        return
+
+    await bot.process_commands(msg)
 
 
 @bot.event
 async def on_ready():
+    bot.start_time = datetime.today()
+    print("{} has started!".format(bot.user.name))
+    print("Current time is {}".format(bot.start_time))
     for server in bot.servers:
-        print("{} has started! {} has {:,} members!".format(bot.user.name, server.name, server.member_count))
+        print("Connected to {} with {:,} members!".format(server.name, server.member_count))
     await bot.change_presence(game=discord.Game(name='Kurisu, help | El.Psy.Kongroo'))
 
 # Load extensions
+print("Loading addons:")
 for extension in bot.config['extensions']:
     try:
         bot.load_extension(extension['name'])

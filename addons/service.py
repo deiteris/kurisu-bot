@@ -1,5 +1,5 @@
-from discord.ext import commands
 import sqlite3
+from discord.ext import commands
 
 
 class Service:
@@ -34,8 +34,6 @@ class Service:
         else:
             await self.send("Access denied.")
 
-    # Temporary section for DB initialization
-    # TODO: Convert db_init to set of subcommands
     @commands.group(pass_context=True)
     async def db(self, ctx):
         """Database management (owner only)"""

@@ -3,8 +3,11 @@ import asyncio
 import re
 import wolframalpha
 import discord
+import string
+import hashlib
+from datetime import datetime
 from discord.ext import commands
-from random import uniform, randrange
+from random import uniform, randrange, choice
 
 
 class General:
@@ -28,6 +31,13 @@ class General:
         numbers = uniform(0, 10)
         divergence = str(numbers)
         msg = "Current wordline divergence is {}".format(divergence[:8])
+        await self.send(msg)
+
+    @commands.command()
+    async def uptime(self):
+        """Shows bot uptime"""
+        uptime = datetime.today() - self.bot.start_time
+        msg = "My uptime is {}".format(uptime)
         await self.send(msg)
 
     @commands.command(pass_context=True)
@@ -63,12 +73,57 @@ class General:
             await self.send(pins_list[i])
 
     @commands.command()
+    async def passgen(self, length: int):
+        """Password generator"""
+        letters = string.ascii_letters
+        digits = string.digits
+        chars = letters + digits + "!@#$%^&()\/|"
+        i = 0
+        password = "Your password: "
+
+        while i < length:
+            i += 1
+            password += "".join(choice(chars))
+        await self.send(password)
+
+    @commands.command()
     async def google(self, *, query: str):
         """Helps you to google. Usage: Kurisu, google <query>"""
         msg = re.sub('\s+', '+', query)
         await self.send('http://i.imgur.com/pIp93NT.jpg')
         await asyncio.sleep(2.5)
         await self.send('Is there anything you can do by yourself?\nhttps://lmgtfy.com/?q={}'.format(msg))
+
+    @commands.group(pass_context=True)
+    async def hash(self, ctx):
+        """Hash input with MD5"""
+        if ctx.invoked_subcommand is None:
+            msg = "Have you ever tried `Kurisu, help hash` command? I suggest you do it now..."
+            await self.send(msg)
+
+    @hash.command(name='md5')
+    async def hash_md5(self, *, txt: str):
+        """Hash input with MD5"""
+        output = hashlib.md5(txt.encode()).hexdigest()
+        await self.send('MD5: {}'.format(output))
+
+    @hash.command(name='sha1')
+    async def hash_sha1(self, *, txt: str):
+        """Hash input with SHA1"""
+        output = hashlib.sha1(txt.encode()).hexdigest()
+        await self.send('SHA1: {}'.format(output))
+
+    @hash.command(name='sha256')
+    async def hash_sha256(self, *, txt: str):
+        """Hash input with SHA256"""
+        output = hashlib.sha256(txt.encode()).hexdigest()
+        await self.send('SHA256: {}'.format(output))
+
+    @hash.command(name='sha512')
+    async def hash_sha512(self, *, txt: str):
+        """Hash input with SHA512"""
+        output = hashlib.sha512(txt.encode()).hexdigest()
+        await self.send('SHA512: {}'.format(output))
 
     # Credits to NotSoSuper#8800
     # https://github.com/NotSoSuper/NotSoBot
@@ -119,7 +174,7 @@ class General:
         except wikipedia.exceptions.DisambiguationError as e:
             opt_list = ', '.join(e.options)
             await self.send("Requested article wasn't found. Try to be as clear as possible.\n\n"
-                             "I have few suggestions for you: `{}`".format(opt_list))
+                            "I have few suggestions for you: `{}`".format(opt_list))
         await self.send(msg)
 
     @wiki.command(name="lang")

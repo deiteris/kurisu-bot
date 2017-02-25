@@ -42,6 +42,7 @@ class Play:
         db = self.bot.db.cursor()
         db.execute("SELECT * FROM sounds")
         data = db.fetchall()
+        db.close()
         for row in data:
             msg += row[0] + "\n"
         msg += "random\n"
@@ -55,6 +56,7 @@ class Play:
         if name == "random":
             db.execute("SELECT * FROM sounds")
             data = db.fetchall()
+            db.close()
             snd = []
             for row in data:
                 snd.append(row[0])
@@ -64,10 +66,10 @@ class Play:
         else:
             db.execute("SELECT * FROM sounds WHERE name=?", (name,))
             row = db.fetchone()
+            db.close()
             snd = row[0]
 
             await self.play_sound(ctx.message, snd)
-        db.close()
 
 
 def setup(bot):

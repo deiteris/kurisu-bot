@@ -23,6 +23,7 @@ class Memes:
         db = self.bot.db.cursor()
         db.execute("SELECT * FROM memes")
         data = db.fetchall()
+        db.close()
         for row in data:
             msg += row[0] + "\n"
         msg += "```"
