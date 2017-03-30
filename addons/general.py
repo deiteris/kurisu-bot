@@ -152,6 +152,98 @@ class General:
             msg += '**Link:** https://www.wolframalpha.com/input/?i={}'.format(i)
             await self.send(msg)
 
+    # Info command group
+    @commands.group(pass_context=True)
+    async def info(self, ctx):
+        """
+        Info command contains server, user and avatar subcommands.
+        
+        Info server gets current server info.
+        Info user <username or @mention> gets user info.
+        Info avatar <username or @mention> gets user avatar url.
+        
+        Usage:
+        Kurisu, info server
+        Kurisu, info user @Emojikage or Emojikage
+        Kurisu, info avatar @Emojikage or Emojikage
+        """
+        if ctx.invoked_subcommand is None:
+            msg = "Have you ever tried `Kurisu, help info` command? I suggest you do it now..."
+            await self.send(msg)
+
+    @info.command(name="server", pass_context=True)
+    async def info_server(self, ctx):
+        """Shows server info"""
+        roles = str(len(ctx.message.server.roles))
+        emojis = str(len(ctx.message.server.emojis))
+        channels = str(len(ctx.message.server.channels))
+
+        embeded = discord.Embed(title=ctx.message.server.name, description='Server Info', color=0xEE8700)
+        embeded.set_thumbnail(url=ctx.message.server.icon_url)
+        embeded.add_field(name="Created at:", value=ctx.message.server.created_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
+        embeded.add_field(name="Users on server:", value=ctx.message.server.member_count, inline=True)
+        embeded.add_field(name="Server owner:", value=ctx.message.server.owner, inline=True)
+
+        embeded.add_field(name="Default Channel:", value=ctx.message.server.default_channel, inline=True)
+        embeded.add_field(name="Server Region:", value=ctx.message.server.region, inline=True)
+        embeded.add_field(name="Verification Level:", value=ctx.message.server.verification_level, inline=True)
+
+        embeded.add_field(name="Role Count:", value=roles, inline=True)
+        embeded.add_field(name="Emoji Count:", value=emojis, inline=True)
+        embeded.add_field(name="Channel Count:", value=channels, inline=True)
+
+        await self.bot.say(embed=embeded)
+
+    @info.command(name="user", pass_context=True)
+    async def info_user(self, ctx, *, name: str):
+        """Shows user info"""
+
+        mentions = ctx.message.mentions
+
+        if mentions:
+            member = mentions[0]
+        else:
+            member = ctx.message.server.get_member_named(name)
+
+        if member is None:
+            await self.bot.say("No members were found. Try again.")
+            return
+
+        roles = member.roles
+        rolesArr = []
+
+        for role in roles:
+            rolesArr.append(role.name)
+
+        # 0 is always @everyone
+        del rolesArr[0]
+
+        embeded = discord.Embed(title=member.name, description='Member Info', color=0xEE8700)
+        embeded.set_thumbnail(url=member.avatar_url)
+        embeded.add_field(name="Nickname:", value=member.nick, inline=True)
+        embeded.add_field(name="ID:", value=member.id, inline=True)
+        embeded.add_field(name="Created account:", value=member.created_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
+        embeded.add_field(name="Joined server:", value=member.joined_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
+        embeded.add_field(name="Roles: ({})".format(len(rolesArr)), value=", ".join(rolesArr), inline=True)
+        await self.bot.say(embed=embeded)
+
+    @info.command(name="avatar", pass_context=True)
+    async def info_avatar(self, ctx, *, name: str):
+        """Shows user avatar url"""
+
+        mentions = ctx.message.mentions
+
+        if mentions:
+            member = mentions[0]
+        else:
+            member = ctx.message.server.get_member_named(name)
+
+        if member is None:
+            await self.bot.say("No members were found. Try again.")
+            return
+
+        await self.bot.say(member.avatar_url)
+
     # Wiki command group
     @commands.group(pass_context=True)
     async def wiki(self, ctx):
@@ -166,9 +258,9 @@ class General:
             msg = "Have you ever tried `Kurisu, help wiki` command? I suggest you do it now..."
             await self.send(msg)
 
-    @wiki.command(name="search")
-    async def wiki_search(self, *, query: str):
-        wikipedia.set_lang(self.bot.wiki_lang_opt)
+    @wiki.command(name="search", pass_context=True)
+    async def wiki_search(self, ctx, *, query: str):
+        wikipedia.set_lang(ctx.message.server.settings['wiki_lang'])
         try:
             msg = wikipedia.summary('{}'.format(query), sentences=10).strip()
         except wikipedia.exceptions.DisambiguationError as e:
@@ -177,10 +269,10 @@ class General:
                             "I have few suggestions for you: `{}`".format(opt_list))
         await self.send(msg)
 
-    @wiki.command(name="lang")
-    async def wiki_lang(self, lang: str):
-        self.bot.wiki_lang_opt = '{}'.format(lang)
-        await self.send("`Wiki language has been set to {}`".format(self.bot.wiki_lang_opt))
+    @wiki.command(name="lang", pass_context=True)
+    async def wiki_lang(self, ctx, lang: str):
+        ctx.message.server.settings.update({'wiki_lang': lang})
+        await self.send("`Wiki language has been set to {}`".format(lang))
 
 
 def setup(bot):
