@@ -24,6 +24,27 @@ class General:
     async def send(self, msg):
         await self.bot.say(msg)
 
+    def get_members(self, ctx, name):
+        members = []
+        for mem in ctx.message.server.members:
+            # Limit number of results
+            if name.lower() in mem.name.lower() and len(members) < 5:
+                members.append(mem.name + "#" + mem.discriminator)
+        return members
+
+    async def get_member(self, ctx, name, members):
+        if name.startswith("<@"):
+            name = name.strip('<@?!#$%^&*>')
+            member = ctx.message.server.get_member(name)
+            return member
+        else:
+            if members:
+                member = ctx.message.server.get_member_named(members[0])
+                return member
+            else:
+                await self.send("No members were found and I don't have any clue who's that.\n\n")
+                return
+
     # Commands
     @commands.command()
     async def divergence(self):
@@ -43,34 +64,15 @@ class General:
     @commands.command(pass_context=True)
     async def randompin(self, ctx):
         """Shows random pinned message"""
-        # Made in complex but simply works!
-        pins_list = []
-        pins_attachment_list = []
         pins = await self.bot.pins_from(ctx.message.channel)
-        # Get pins
-        for pin in pins:
-            try:
-                # Check if we have attachments for a pin
-                if pin.attachments:
-                    for attachment in pin.attachments:
-                        # Add image to pins_attachment_list array
-                        pins_attachment_list.append(attachment)
-                else:
-                    # TODO: Usually we deal with only one attachment per message, so it will work perfectly.
-                    # TODO: But what if we have more than one in the same message... Is it even possible?
-                    # Keep arrays equal. Fill space with zero.
-                    pins_attachment_list.append(0)
-                # Add message to pins_list array
-                pins_list.append(pin.content)
-            except discord.HTTPException as e:
-                print('Pin {} failed to load.'.format(e))
-        i = randrange(0, len(pins_list))
 
-        # Since we have equal arrays we can simply check if the same array index has zero and respond accordingly
-        if pins_attachment_list[i] != 0:
-            await self.send('{1}\n{0}'.format(pins_attachment_list[i]['url'], pins_list[i]))
+        if pins:
+            i = randrange(0, len(pins))
+            if not pins[i].attachments:
+                pins[i].attachments = [{'url': ""}]
+            await self.send("{}: {} {}".format(pins[i].author, pins[i].content, pins[i].attachments[0]['url']))
         else:
-            await self.send(pins_list[i])
+            await self.send("There are no pinned messages in this channel!")
 
     @commands.command()
     async def passgen(self, length: int):
@@ -96,7 +98,7 @@ class General:
 
     @commands.group(pass_context=True)
     async def hash(self, ctx):
-        """Hash input with MD5"""
+        """Set of hash commands"""
         if ctx.invoked_subcommand is None:
             msg = "Have you ever tried `Kurisu, help hash` command? I suggest you do it now..."
             await self.send(msg)
@@ -152,27 +154,8 @@ class General:
             msg += '**Link:** https://www.wolframalpha.com/input/?i={}'.format(i)
             await self.send(msg)
 
-    # Info command group
-    @commands.group(pass_context=True)
-    async def info(self, ctx):
-        """
-        Info command contains server, user and avatar subcommands.
-        
-        Info server gets current server info.
-        Info user <username or @mention> gets user info.
-        Info avatar <username or @mention> gets user avatar url.
-        
-        Usage:
-        Kurisu, info server
-        Kurisu, info user @Emojikage or Emojikage
-        Kurisu, info avatar @Emojikage or Emojikage
-        """
-        if ctx.invoked_subcommand is None:
-            msg = "Have you ever tried `Kurisu, help info` command? I suggest you do it now..."
-            await self.send(msg)
-
-    @info.command(name="server", pass_context=True)
-    async def info_server(self, ctx):
+    @commands.command(pass_context=True)
+    async def server(self, ctx):
         """Shows server info"""
         roles = str(len(ctx.message.server.roles))
         emojis = str(len(ctx.message.server.emojis))
@@ -180,7 +163,7 @@ class General:
 
         embeded = discord.Embed(title=ctx.message.server.name, description='Server Info', color=0xEE8700)
         embeded.set_thumbnail(url=ctx.message.server.icon_url)
-        embeded.add_field(name="Created at:", value=ctx.message.server.created_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
+        embeded.add_field(name="Created at:", value=ctx.message.server.created_at.strftime('%d %B %Y at %H:%M'), inline=True)
         embeded.add_field(name="Users on server:", value=ctx.message.server.member_count, inline=True)
         embeded.add_field(name="Server owner:", value=ctx.message.server.owner, inline=True)
 
@@ -194,55 +177,76 @@ class General:
 
         await self.bot.say(embed=embeded)
 
-    @info.command(name="user", pass_context=True)
-    async def info_user(self, ctx, *, name: str):
+    @commands.command(pass_context=True)
+    async def user(self, ctx, *, name: str):
         """Shows user info"""
 
-        mentions = ctx.message.mentions
+        members = self.get_members(ctx, name)
 
-        if mentions:
-            member = mentions[0]
-        else:
-            member = ctx.message.server.get_member_named(name)
-
-        if member is None:
-            await self.bot.say("No members were found. Try again.")
+        if len(members) > 3:
+            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
             return
 
-        roles = member.roles
-        rolesArr = []
+        member = await self.get_member(ctx, name, members)
 
-        for role in roles:
-            rolesArr.append(role.name)
+        roles = []
+        server_counter = 0
+
+        for role in member.roles:
+            roles.append(role.name)
+
+        for server in self.bot.servers:
+            if server.get_member(member.id) is not None:
+                server_counter += 1
 
         # 0 is always @everyone
-        del rolesArr[0]
+        del roles[0]
 
-        embeded = discord.Embed(title=member.name, description='Member Info', color=0xEE8700)
+        created_time_ago = datetime.today() - member.created_at
+        joined_time_ago = datetime.today() - member.joined_at
+
+        # TODO: Feels kinda bad but what else can I do?
+        created_case = "days" if created_time_ago.days > 1 else "day"
+        joined_case = "days" if joined_time_ago.days > 1 else "day"
+
+        created_at = "{} ({} {} ago)".format(member.created_at.strftime('%d %B %Y at %H:%M'), created_time_ago.days, created_case)
+        joined_at = "{} ({} {} ago)".format(member.joined_at.strftime('%d %B %Y at %H:%M'), joined_time_ago.days, joined_case)
+
+        embeded = discord.Embed(title=member.name + "#" + member.discriminator, description='Member Info', color=0xEE8700)
         embeded.set_thumbnail(url=member.avatar_url)
         embeded.add_field(name="Nickname:", value=member.nick, inline=True)
         embeded.add_field(name="ID:", value=member.id, inline=True)
-        embeded.add_field(name="Created account:", value=member.created_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
-        embeded.add_field(name="Joined server:", value=member.joined_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
-        embeded.add_field(name="Roles: ({})".format(len(rolesArr)), value=", ".join(rolesArr), inline=True)
-        await self.bot.say(embed=embeded)
+        embeded.add_field(name="Shared servers:", value=server_counter, inline=False)
+        embeded.add_field(name="Created account:", value=created_at, inline=False)
+        embeded.add_field(name="Joined server:", value=joined_at, inline=False)
 
-    @info.command(name="avatar", pass_context=True)
-    async def info_avatar(self, ctx, *, name: str):
+        # TODO: probably this can be shortened
+        if not roles:
+            embeded.add_field(name="Roles: ({})".format(len(roles)), value="None", inline=False)
+        else:
+            embeded.add_field(name="Roles: ({})".format(len(roles)), value=", ".join(roles), inline=False)
+
+        if len(members) > 1:
+            await self.bot.say("There are more members you might be interested in:\n" + "\n".join(members), embed=embeded)
+        else:
+            await self.bot.say(embed=embeded)
+
+    @commands.command(pass_context=True)
+    async def avatar(self, ctx, *, name: str):
         """Shows user avatar url"""
 
-        mentions = ctx.message.mentions
+        members = self.get_members(ctx, name)
 
-        if mentions:
-            member = mentions[0]
-        else:
-            member = ctx.message.server.get_member_named(name)
-
-        if member is None:
-            await self.bot.say("No members were found. Try again.")
+        if len(members) > 3:
+            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
             return
 
-        await self.bot.say(member.avatar_url)
+        member = await self.get_member(ctx, name, members)
+
+        if len(members) > 1:
+            await self.send("There are more members you might be interested in:\n" + "\n".join(members) + "\n\n{}".format(member.avatar_url))
+        else:
+            await self.send(member.avatar_url)
 
     # Wiki command group
     @commands.group(pass_context=True)
@@ -263,11 +267,11 @@ class General:
         wikipedia.set_lang(ctx.message.server.settings['wiki_lang'])
         try:
             msg = wikipedia.summary('{}'.format(query), sentences=10).strip()
+            await self.send(msg)
         except wikipedia.exceptions.DisambiguationError as e:
             opt_list = ', '.join(e.options)
             await self.send("Requested article wasn't found. Try to be as clear as possible.\n\n"
                             "I have few suggestions for you: `{}`".format(opt_list))
-        await self.send(msg)
 
     @wiki.command(name="lang", pass_context=True)
     async def wiki_lang(self, ctx, lang: str):

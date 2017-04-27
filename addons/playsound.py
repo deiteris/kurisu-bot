@@ -17,13 +17,27 @@ class Play:
     async def send(self, msg):
         await self.bot.say(msg)
 
-    # TODO: Requires some tweaking to match channel permissions (if muted, afk and etc)
     async def play_sound(self, msg, snd):
         vc = msg.author.voice_channel
+
         if str(vc) == "None":
-            await self.bot.send_message(msg.channel, "`Connect to voice channel first!`")
+            await self.bot.send_message(msg.channel, "Connect to voice channel first!")
             return
+
+        bot = msg.server.get_member(self.bot.user.id)
+        permissions = vc.permissions_for(bot)
+
+        if not permissions.speak:
+            await self.bot.send_message(msg.channel, "Failed to connect to channel. Reason: `muted`")
+            return
+
+        # Looks like checking if muted is enough even if we're lacking permissions or if it's afk channel
+        #if not permissions.connect:
+        #    await self.bot.send_message(msg.channel, "Failed to connect to channel. Reason: can't connect to this channel.")
+        #    return
+
         voice_client = await self.bot.join_voice_channel(vc)
+
         if voice_client.is_connected():
 
             player = voice_client.create_ffmpeg_player('sounds/' + snd + '.mp3')

@@ -1,4 +1,5 @@
 from discord.ext import commands
+from random import randrange
 
 
 class Memes:
@@ -26,19 +27,32 @@ class Memes:
         db.close()
         for row in data:
             msg += row[0] + "\n"
+        msg += "random\n"
         msg += "```"
         await self.send(msg)
 
     # Commands
     @commands.command()
-    async def meme(self, name: str):
+    async def meme(self, *, name: str):
         """Shows meme. Usage: Kurisu, meme <name>"""
         db = self.bot.db.cursor()
-        db.execute("SELECT * FROM memes WHERE name=?", (name,))
-        row = db.fetchone()
-        msg = row[1]
-        db.close()
-        await self.send(msg)
+        if name == "random":
+            db.execute("SELECT * FROM memes")
+            data = db.fetchall()
+            db.close()
+            memes = []
+            for row in data:
+                memes.append(row[1])
+            i = randrange(0, len(memes))
+
+            await self.send(memes[i])
+        else:
+            db.execute("SELECT * FROM memes WHERE name=?", (name,))
+            row = db.fetchone()
+            db.close()
+            meme = row[1]
+
+            await self.send(meme)
 
 
 # Load the extension
