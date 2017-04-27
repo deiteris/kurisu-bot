@@ -39,10 +39,13 @@ class General:
             return member
         else:
             if members:
+                if len(members) > 3:
+                    await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+                    return
                 member = ctx.message.server.get_member_named(members[0])
                 return member
             else:
-                await self.send("No members were found and I don't have any clue who's that.\n\n")
+                await self.send("No members were found and I don't have any clue who's that.")
                 return
 
     # Commands
@@ -163,7 +166,7 @@ class General:
 
         embeded = discord.Embed(title=ctx.message.server.name, description='Server Info', color=0xEE8700)
         embeded.set_thumbnail(url=ctx.message.server.icon_url)
-        embeded.add_field(name="Created at:", value=ctx.message.server.created_at.strftime('%d %B %Y at %H:%M'), inline=True)
+        embeded.add_field(name="Created on:", value=ctx.message.server.created_at.strftime('%d %B %Y at %H:%M UTC'), inline=True)
         embeded.add_field(name="Users on server:", value=ctx.message.server.member_count, inline=True)
         embeded.add_field(name="Server owner:", value=ctx.message.server.owner, inline=True)
 
@@ -182,10 +185,6 @@ class General:
         """Shows user info"""
 
         members = self.get_members(ctx, name)
-
-        if len(members) > 3:
-            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
-            return
 
         member = await self.get_member(ctx, name, members)
 
@@ -209,8 +208,8 @@ class General:
         created_case = "days" if created_time_ago.days > 1 else "day"
         joined_case = "days" if joined_time_ago.days > 1 else "day"
 
-        created_at = "{} ({} {} ago)".format(member.created_at.strftime('%d %B %Y at %H:%M'), created_time_ago.days, created_case)
-        joined_at = "{} ({} {} ago)".format(member.joined_at.strftime('%d %B %Y at %H:%M'), joined_time_ago.days, joined_case)
+        created_at = "{} ({} {} ago)".format(member.created_at.strftime('%d %B %Y at %H:%M UTC'), created_time_ago.days, created_case)
+        joined_at = "{} ({} {} ago)".format(member.joined_at.strftime('%d %B %Y at %H:%M UTC'), joined_time_ago.days, joined_case)
 
         embeded = discord.Embed(title=member.name + "#" + member.discriminator, description='Member Info', color=0xEE8700)
         embeded.set_thumbnail(url=member.avatar_url)
@@ -236,10 +235,6 @@ class General:
         """Shows user avatar url"""
 
         members = self.get_members(ctx, name)
-
-        if len(members) > 3:
-            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
-            return
 
         member = await self.get_member(ctx, name, members)
 
