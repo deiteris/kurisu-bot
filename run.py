@@ -71,20 +71,8 @@ async def on_server_join(server):
 #        await bot.send_message(before.server.default_channel, "{}, {}-san!".format(opt_list[i], str.capitalize(before.name)))
 
 
-@bot.event
-async def on_member_join(member):
-    steins_gate = "213420119034953729"
-
-    if member.server.id == steins_gate:
-        RCgamer77 = "RCgamer77#0099"
-        #Me = "Emojikage#3095"
-        embeded = discord.Embed(title="A new member has come to Steins;Gate church!", description='Member Info', color=0xEE8700)
-        embeded.set_thumbnail(url=member.avatar_url)
-        embeded.add_field(name="Name:", value=member.name, inline=True)
-        embeded.add_field(name="ID:", value=member.id, inline=True)
-        embeded.add_field(name="Created account:", value=member.created_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
-        embeded.set_image(url="https://i.imgur.com/Wj57Pe2.jpg")
-        await bot.send_message(member.server.get_member_named(RCgamer77), embed=embeded)
+#@bot.event
+#async def on_member_join(member):
 #    if str(member.bot) != "True":
 #        embeded = discord.Embed(title='New Labomem!', description='Labomem {} has joined our laboratory.'.format(str.capitalize(member.name)))
 #        embeded.set_image(url='http://i.imgur.com/HYBdoFe.png')
@@ -103,15 +91,21 @@ async def on_message(msg):
     if msg.author.bot:
         return
 
-    channel = msg.channel
-    message = msg.content.lower()
+    # Handle possible error. Just in case.
+    try:
+        server = msg.server
+    except AttributeError:
+        server = "No server"
 
-    #try:
-    #    server = msg.author.server
-    #except AttributeError:
-    #    server = "No server"
+    # Whatever
+    # if server.id == "213420119034953729" and msg.author.id != bot.config['owner']:
+    #    return
+
+    channel = msg.channel
+    content = msg.content.lower()
 
     # Log section
+    # TODO: Use database
     #with open("log.txt", "a") as log:
     #    if msg.attachments:
     #        for attachment in msg.attachments:
@@ -120,17 +114,16 @@ async def on_message(msg):
     #    else:
     #        log.write('{}:{} -- [{}]: {} - {}\n'.format(server, channel, msg.timestamp, msg.author, msg.clean_content))
 
-    # TODO: Probably needs to be done in some other way...
-    #if message in "kurisu":
+    #if content == "kurisu":
     #    opt_list = ["Yes?", "Huh?", "What's the matter?"]
     #    i = randrange(0, len(opt_list))
     #    await bot.send_message(channel, opt_list[i])
 
-    if message.startswith("kurisutina"):
+    if content.startswith("kurisutina"):
         await bot.send_message(channel, "I told you there is no -tina!")
         return
 
-    if message in ("nurupo", "nullpo", "ぬるぽ"):
+    if content in ("nurupo", "nullpo", "ぬるぽ"):
         await bot.send_message(channel, "Gah!")
         return
 
@@ -157,5 +150,6 @@ for extension in bot.config['extensions']:
     except Exception as e:
         print('{} failed to load.\n{}: {}'.format(extension['name'], type(e).__name__, e))
 
-# bot.run(bot.config['token'])
+# Use token for bot or email/password for user account
+#bot.run(bot.config['token'])
 bot.run(bot.config['email'], bot.config['password'])

@@ -26,10 +26,12 @@ class General:
 
     def get_members(self, ctx, name):
         members = []
+
         for mem in ctx.message.server.members:
             # Limit number of results
             if name.lower() in mem.name.lower() and len(members) < 5:
                 members.append(mem.name + "#" + mem.discriminator)
+
         return members
 
     async def get_member(self, ctx, name, members):
@@ -39,9 +41,6 @@ class General:
             return member
         else:
             if members:
-                if len(members) > 3:
-                    await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
-                    return
                 member = ctx.message.server.get_member_named(members[0])
                 return member
             else:
@@ -93,7 +92,7 @@ class General:
 
     @commands.command()
     async def google(self, *, query: str):
-        """Helps you to google. Usage: Kurisu, google <query>"""
+        """Helps you to google"""
         msg = re.sub('\s+', '+', query)
         await self.send('http://i.imgur.com/pIp93NT.jpg')
         await asyncio.sleep(2.5)
@@ -129,6 +128,56 @@ class General:
         """Hash input with SHA512"""
         output = hashlib.sha512(txt.encode()).hexdigest()
         await self.send('SHA512: {}'.format(output))
+
+    @commands.command(pass_context=True)
+    async def react(self, ctx, target: str, *, word: str):
+        """React to message with regional indicators"""
+
+        # Emojis dictionary
+        emojis = {
+            "a": u"\U0001F1E6", "b": u"\U0001F1E7", "c": u"\U0001F1E8", "d": u"\U0001F1E9", "e": u"\U0001F1EA",
+            "f": u"\U0001F1EB", "g": u"\U0001F1EC", "h": u"\U0001F1ED", "i": u"\U0001F1EE", "j": u"\U0001F1EF",
+            "k": u"\U0001F1F0", "l": u"\U0001F1F1", "m": u"\U0001F1F2", "n": u"\U0001F1F3", "o": u"\U0001F1F4",
+            "p": u"\U0001F1F5", "q": u"\U0001F1F6", "r": u"\U0001F1F7", "s": u"\U0001F1F8", "t": u"\U0001F1F9",
+            "u": u"\U0001F1FA", "v": u"\U0001F1FB", "w": u"\U0001F1FC", "x": u"\U0001F1FD", "y": u"\U0001F1FE",
+            "z": u"\U0001F1FF",
+            "0": "\u0030\u20E3", "1": "\u0031\u20E3", "2": "\u0032\u20E3", "3": "\u0033\u20E3",
+            "4": "\u0034\u20E3", "5": "\u0035\u20E3", "6": "\u0036\u20E3", "7": "\u0037\u20E3",
+            "8": "\u0038\u20E3", "9": "\u0039\u20E3"
+        }
+
+        # Additional emojis dictionary in addition to reaction
+        dictionary = {
+            "pin": u'\U0001F4CC', "purge": u'\U0001F525', "nice": u'\U0001F44D',
+            "nevah": u'\U00002122', "so0n": u'\U00002122'
+        }
+
+        async def react_to(msg, bot, reaction):
+            letters = re.sub('\s+', '', reaction)
+            letters = list(letters)
+
+            for letter in letters:
+                await bot.add_reaction(msg, emojis[letter.lower()])
+            if reaction in dictionary:
+                await bot.add_reaction(msg, dictionary[reaction.lower()])
+
+        if target == "me":
+            await react_to(ctx.message, self.bot, word)
+            return
+
+        # Use bot API capabilities
+        #try:
+        #    message = await self.bot.get_message(ctx.message.channel, msg_id)
+        #    for letter in letters:
+        #        await self.bot.add_reaction(message, emojis[letter.lower()])
+        #except discord.NotFound:
+        #    await self.send('Message not found!')
+
+        # Backward compatibility if bot runs as user
+        async for message in self.bot.logs_from(ctx.message.channel, limit=70):
+            if str(message.id) == target:
+                await react_to(message, self.bot, word)
+                return
 
     # Credits to NotSoSuper#8800
     # https://github.com/NotSoSuper/NotSoBot
@@ -186,6 +235,10 @@ class General:
 
         members = self.get_members(ctx, name)
 
+        if len(members) > 4:
+            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            return
+
         member = await self.get_member(ctx, name, members)
 
         roles = []
@@ -236,6 +289,10 @@ class General:
 
         members = self.get_members(ctx, name)
 
+        if len(members) > 4:
+            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            return
+
         member = await self.get_member(ctx, name, members)
 
         if len(members) > 1:
@@ -259,6 +316,7 @@ class General:
 
     @wiki.command(name="search", pass_context=True)
     async def wiki_search(self, ctx, *, query: str):
+        """Searches article on wiki"""
         wikipedia.set_lang(ctx.message.server.settings['wiki_lang'])
         try:
             msg = wikipedia.summary('{}'.format(query), sentences=10).strip()
@@ -270,6 +328,7 @@ class General:
 
     @wiki.command(name="lang", pass_context=True)
     async def wiki_lang(self, ctx, lang: str):
+        """Sets wiki language. Format: en"""
         ctx.message.server.settings.update({'wiki_lang': lang})
         await self.send("`Wiki language has been set to {}`".format(lang))
 

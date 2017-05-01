@@ -43,6 +43,7 @@ class Service:
 
     @db.command(name="init", pass_context=True)
     async def db_init(self, ctx):
+        """Initializes db (required on first start)"""
 
         if ctx.message.author.id != self.bot.config['owner']:
             await self.send("Access denied.")
@@ -79,6 +80,7 @@ class Service:
 
     @db.command(name="add", pass_context=True)
     async def db_add(self, ctx, table: str, name: str, content: str):
+        """Add record"""
 
         if ctx.message.author.id != self.bot.config['owner']:
             await self.send("Access denied.")
@@ -96,7 +98,7 @@ class Service:
 
     @db.command(name="edit", pass_context=True)
     async def db_edit(self, ctx, table: str, name: str, column: str, value: str):
-
+        """Edit record"""
         if ctx.message.author.id != self.bot.config['owner']:
             await self.send("Access denied.")
             return
@@ -112,7 +114,7 @@ class Service:
 
     @db.command(name="rm", pass_context=True)
     async def db_remove(self, ctx, table: str, name: str):
-
+        """Remove record"""
         if ctx.message.author.id != self.bot.config['owner']:
             await self.send("Access denied.")
             return
