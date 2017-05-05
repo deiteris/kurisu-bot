@@ -1,3 +1,4 @@
+import sqlite3
 from discord.ext import commands
 from random import randrange
 
@@ -16,12 +17,27 @@ class Memes:
     async def send(self, msg):
         await self.bot.say(msg)
 
+    # TODO: Move this to utils
+    async def db_check(self, db):
+        try:
+            db.execute('SELECT 1 FROM memes')
+            return True
+        except sqlite3.Error:
+            db.close()
+            return False
+
     # List commands
     @commands.command()
     async def memes(self):
         """List memes."""
-        msg = "`Usage: Kurisu, meme <name>`\n```List of memes:\n"
+
         db = self.bot.db.cursor()
+
+        if not await self.db_check(db):
+            await self.send("Database is not initialized. Use `Kurisu, db init` to perform initialization.")
+            return
+
+        msg = "`Usage: Kurisu, meme <name>`\n```List of memes:\n"
         db.execute("SELECT * FROM memes")
         data = db.fetchall()
         db.close()
@@ -35,11 +51,16 @@ class Memes:
     @commands.command()
     async def meme(self, *, name: str):
         """Shows meme. Usage: Kurisu, meme <name>"""
+
         db = self.bot.db.cursor()
+
+        if not await self.db_check(db):
+            await self.send("Database is not initialized. Use `Kurisu, db init` to perform initialization.")
+            return
+
         if name == "random":
             db.execute("SELECT * FROM memes")
             data = db.fetchall()
-            db.close()
             memes = []
             for row in data:
                 memes.append(row[1])
@@ -49,10 +70,11 @@ class Memes:
         else:
             db.execute("SELECT * FROM memes WHERE name=?", (name,))
             row = db.fetchone()
-            db.close()
             meme = row[1]
 
             await self.send(meme)
+
+        db.close()
 
 
 # Load the extension

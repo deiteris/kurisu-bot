@@ -91,28 +91,8 @@ async def on_message(msg):
     if msg.author.bot:
         return
 
-    # Handle possible error. Just in case.
-    try:
-        server = msg.server
-    except AttributeError:
-        server = "No server"
-
-    # Whatever
-    # if server.id == "213420119034953729" and msg.author.id != bot.config['owner']:
-    #    return
-
     channel = msg.channel
     content = msg.content.lower()
-
-    # Log section
-    # TODO: Use database
-    #with open("log.txt", "a") as log:
-    #    if msg.attachments:
-    #        for attachment in msg.attachments:
-    #            attachment_url = attachment['url']
-    #        log.write('{}:{} -- [{}]: {} - {} | {}\n'.format(server, channel, msg.timestamp, msg.author, msg.clean_content, attachment_url))
-    #    else:
-    #        log.write('{}:{} -- [{}]: {} - {}\n'.format(server, channel, msg.timestamp, msg.author, msg.clean_content))
 
     #if content == "kurisu":
     #    opt_list = ["Yes?", "Huh?", "What's the matter?"]
@@ -150,6 +130,8 @@ for extension in bot.config['extensions']:
     except Exception as e:
         print('{} failed to load.\n{}: {}'.format(extension['name'], type(e).__name__, e))
 
-# Use token for bot or email/password for user account
-#bot.run(bot.config['token'])
-bot.run(bot.config['email'], bot.config['password'])
+# Set bot type in config. Will use token by default.
+if bot.config['type'] == "user":
+    bot.run(bot.config['email'], bot.config['password'])
+else:
+    bot.run(bot.config['token'])

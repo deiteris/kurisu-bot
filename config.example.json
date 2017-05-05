@@ -1,9 +1,22 @@
 {
+	"__general_comment": "Do not edit __comment fields.",
+	"__type_comment": "If you want to use bot as user, then use type 'user'. Else leave it empty or enter 'bot'",
+	"type": "bot",
+	
+	"__credentials_comment": "Optional: Provide email and password credentials if you want to run bot on user account.",
 	"email": "",
 	"password": "",
+	
+	"__token_comment": "Provide token if you want to run bot on bot account.",
 	"token": "",
+	
+	"__owner_comment": "Provide your Owner ID, so you will have access to 'service' commands.",
 	"owner": "",
+	
+	"__wolfram_comment": "Optional: Provide Wolframalpha API key if you want to use it.",
 	"wolfram": "",
+	
+	"__extensions_comment": "That's it. Extensions don't require any changes.",
 	"extensions": [
 		{
 			"name": "addons.general"
@@ -16,6 +29,9 @@
 		},
 		{
 			"name": "addons.service"
+		},
+		{
+			"name": "addons.mod"
 		}
 	]
 }

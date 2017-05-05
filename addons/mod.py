@@ -1,5 +1,6 @@
 from discord.ext import commands
 import discord
+import asyncio
 
 
 class Mod:
@@ -10,12 +11,14 @@ class Mod:
     # Construct
     def __init__(self, bot):
         self.bot = bot
+        self.tasks_storage = {}
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
     # Send message
     async def send(self, msg):
         await self.bot.say(msg)
 
+    # TODO: Move this to utils
     def get_members(self, ctx, name):
         members = []
 
@@ -38,6 +41,65 @@ class Mod:
             else:
                 await self.send("No members were found and I don't have any clue who's that.")
                 return
+
+    async def unmute_timer(self, ctx, member, time: int):
+
+        await asyncio.sleep(time)
+
+        # Create empty PermissionOverwrite object and update values
+        overwrites = discord.PermissionOverwrite()
+        overwrites.update(send_messages=None, send_tts_messages=None, add_reactions=None)
+
+        for channel in ctx.message.server.channels:
+            # We need only text channels
+            if channel.type is channel.type.text:
+                # Set perms for each channel
+                await self.bot.edit_channel_permissions(channel, member, overwrites)
+
+        await self.send("Member {} has been unmuted.".format(member.name))
+
+    # Commands
+    @commands.command(pass_context=True, name="mute-t")
+    async def mute_t(self, ctx, user: str, time: int):
+        """Mute for specific time"""
+
+        if ctx.message.author.id != self.bot.config['owner']:
+            await self.send("Access denied.")
+            return
+
+        # Check for permission before proceed
+        bot = ctx.message.server.get_member(self.bot.user.id)
+        bot_permissions = bot.server_permissions
+
+        if not bot_permissions.manage_roles:
+            await self.send("I'm not able to manage permissions without `Manage Roles` permission")
+            return
+
+        members = self.get_members(ctx, user)
+
+        if len(members) > 4:
+            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            return
+
+        member = await self.get_member(ctx, user, members)
+
+        # Create empty PermissionOverwrite object and update values
+        overwrites = discord.PermissionOverwrite()
+        overwrites.update(send_messages=False, send_tts_messages=False, add_reactions=False)
+
+        # TODO: Global mute/unmute might be a little bit overkill
+        # TODO: Not so fast, but 100% effective
+        for channel in ctx.message.server.channels:
+            # We need only text channels
+            if channel.type is channel.type.text:
+                # Set perms for each channel
+                await self.bot.edit_channel_permissions(channel, member, overwrites)
+
+        await self.send("Member {} has been muted for {} seconds".format(member.name, time))
+
+        # Set unmute timer
+        # TODO: Store and reinitilize timers after restart
+        await self.unmute_timer(ctx, member, time)
 
     @commands.command(pass_context=True)
     async def mute(self, ctx, user: str):
@@ -113,6 +175,7 @@ class Mod:
                 # Set perms for each channel
                 await self.bot.edit_channel_permissions(channel, member, overwrites)
 
+        # TODO: Ensure if we don't have timer on member or remove it
         await self.send("Member {} has been unmuted".format(member.name))
 
 

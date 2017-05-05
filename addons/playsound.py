@@ -1,4 +1,6 @@
 import asyncio
+import sqlite3
+import discord
 from discord.ext import commands
 from random import randrange
 
@@ -16,6 +18,15 @@ class Play:
     # Send message
     async def send(self, msg):
         await self.bot.say(msg)
+
+    # TODO: Move this to utils
+    async def db_check(self, db):
+        try:
+            db.execute('SELECT 1 FROM sounds')
+            return True
+        except sqlite3.Error:
+            db.close()
+            return False
 
     async def play_sound(self, msg, snd):
         vc = msg.author.voice_channel
@@ -40,20 +51,31 @@ class Play:
 
         if voice_client.is_connected():
 
-            player = voice_client.create_ffmpeg_player('sounds/' + snd + '.mp3')
-            player.start()
-
-            while player.is_playing():
-                await asyncio.sleep(0.2)
-            else:
+            try:
+                player = voice_client.create_ffmpeg_player('sounds/' + snd + '.mp3')
+                player.start()
+                while player.is_playing():
+                    await asyncio.sleep(0.2)
+                else:
+                    await voice_client.disconnect()
+            except discord.ClientException:
+                # TODO: Needs to be tested
+                await self.send("How am I supposed to speak without codecs!? Install `ffmpeg` first!")
                 await voice_client.disconnect()
 
     # List commands & play command group
     @commands.command()
     async def sounds(self):
         """List sounds."""
-        msg = "`Usage: Kurisu, play <name>`\n```List of sounds:\n"
+
         db = self.bot.db.cursor()
+
+        if not await self.db_check(db):
+            await self.send("Database is not initialized. Use `Kurisu, db init` to perform initialization.")
+            return
+
+        msg = "`Usage: Kurisu, play <name>`\n```List of sounds:\n"
+
         db.execute("SELECT * FROM sounds")
         data = db.fetchall()
         db.close()
@@ -67,10 +89,14 @@ class Play:
     async def play(self, ctx, name: str):
         """Plays sound. Usage: Kurisu, play <name>"""
         db = self.bot.db.cursor()
+
+        if not await self.db_check(db):
+            await self.send("Database is not initialized. Use `Kurisu, db init` to perform initialization.")
+            return
+
         if name == "random":
             db.execute("SELECT * FROM sounds")
             data = db.fetchall()
-            db.close()
             snd = []
             for row in data:
                 snd.append(row[0])
@@ -80,10 +106,10 @@ class Play:
         else:
             db.execute("SELECT * FROM sounds WHERE name=?", (name,))
             row = db.fetchone()
-            db.close()
             snd = row[0]
 
             await self.play_sound(ctx.message, snd)
+        db.close()
 
 
 def setup(bot):

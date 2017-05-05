@@ -24,6 +24,7 @@ class General:
     async def send(self, msg):
         await self.bot.say(msg)
 
+    # TODO: Move this to utils
     def get_members(self, ctx, name):
         members = []
 
@@ -149,7 +150,7 @@ class General:
         # Additional emojis dictionary in addition to reaction
         dictionary = {
             "pin": u'\U0001F4CC', "purge": u'\U0001F525', "nice": u'\U0001F44D',
-            "nevah": u'\U00002122', "so0n": u'\U00002122'
+            "nevah": u'\U00002122', "so0n": u'\U00002122', "ok": u'\U0001F197'
         }
 
         async def react_to(msg, bot, reaction):
