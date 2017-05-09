@@ -1,4 +1,4 @@
-import sqlite3
+import utils
 from discord.ext import commands
 from random import randrange
 
@@ -17,30 +17,20 @@ class Memes:
     async def send(self, msg):
         await self.bot.say(msg)
 
-    # TODO: Move this to utils
-    async def db_check(self, db):
-        try:
-            db.execute('SELECT 1 FROM memes')
-            return True
-        except sqlite3.Error:
-            db.close()
-            return False
-
     # List commands
-    @commands.command()
-    async def memes(self):
+    @commands.command(pass_context=True)
+    async def memes(self, ctx):
         """List memes."""
 
-        db = self.bot.db.cursor()
+        cursor = self.bot.db.cursor()
 
-        if not await self.db_check(db):
-            await self.send("Database is not initialized. Use `Kurisu, db init` to perform initialization.")
+        if not await utils.db_check(self.bot, ctx, cursor, "memes"):
             return
 
         msg = "`Usage: Kurisu, meme <name>`\n```List of memes:\n"
-        db.execute("SELECT * FROM memes")
-        data = db.fetchall()
-        db.close()
+        cursor.execute("SELECT * FROM memes")
+        data = cursor.fetchall()
+        cursor.close()
         for row in data:
             msg += row[0] + "\n"
         msg += "random\n"
@@ -48,19 +38,18 @@ class Memes:
         await self.send(msg)
 
     # Commands
-    @commands.command()
-    async def meme(self, *, name: str):
+    @commands.command(pass_context=True)
+    async def meme(self, ctx, *, name: str):
         """Shows meme. Usage: Kurisu, meme <name>"""
 
-        db = self.bot.db.cursor()
+        cursor = self.bot.db.cursor()
 
-        if not await self.db_check(db):
-            await self.send("Database is not initialized. Use `Kurisu, db init` to perform initialization.")
+        if not await utils.db_check(self.bot, ctx, cursor, "memes"):
             return
 
         if name == "random":
-            db.execute("SELECT * FROM memes")
-            data = db.fetchall()
+            cursor.execute("SELECT * FROM memes")
+            data = cursor.fetchall()
             memes = []
             for row in data:
                 memes.append(row[1])
@@ -68,13 +57,13 @@ class Memes:
 
             await self.send(memes[i])
         else:
-            db.execute("SELECT * FROM memes WHERE name=?", (name,))
-            row = db.fetchone()
+            cursor.execute("SELECT * FROM memes WHERE name=?", (name,))
+            row = cursor.fetchone()
             meme = row[1]
 
             await self.send(meme)
 
-        db.close()
+        cursor.close()
 
 
 # Load the extension

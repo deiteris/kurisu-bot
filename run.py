@@ -10,7 +10,6 @@ import discord
 import json
 import sqlite3
 from discord.ext import commands
-from random import randrange
 from datetime import datetime
 
 description = """
@@ -93,11 +92,6 @@ async def on_message(msg):
 
     channel = msg.channel
     content = msg.content.lower()
-
-    #if content == "kurisu":
-    #    opt_list = ["Yes?", "Huh?", "What's the matter?"]
-    #    i = randrange(0, len(opt_list))
-    #    await bot.send_message(channel, opt_list[i])
 
     if content.startswith("kurisutina"):
         await bot.send_message(channel, "I told you there is no -tina!")

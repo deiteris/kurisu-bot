@@ -5,9 +5,10 @@ import wolframalpha
 import discord
 import string
 import hashlib
+import utils
 from datetime import datetime
 from discord.ext import commands
-from random import uniform, randrange, choice
+from random import randrange, choice
 
 
 class General:
@@ -24,37 +25,22 @@ class General:
     async def send(self, msg):
         await self.bot.say(msg)
 
-    # TODO: Move this to utils
-    def get_members(self, ctx, name):
-        members = []
-
-        for mem in ctx.message.server.members:
-            # Limit number of results
-            if name.lower() in mem.name.lower() and len(members) < 5:
-                members.append(mem.name + "#" + mem.discriminator)
-
-        return members
-
-    async def get_member(self, ctx, name, members):
-        if name.startswith("<@"):
-            name = name.strip('<@?!#$%^&*>')
-            member = ctx.message.server.get_member(name)
-            return member
-        else:
-            if members:
-                member = ctx.message.server.get_member_named(members[0])
-                return member
-            else:
-                await self.send("No members were found and I don't have any clue who's that.")
-                return
-
     # Commands
     @commands.command()
-    async def divergence(self):
+    async def ping(self):
+        """Simple bot ping"""
+        opt_list = ["Yes?", "Huh?", "What's the matter?"]
+        i = randrange(0, len(opt_list))
+        await self.send(opt_list[i])
+
+    @commands.command()
+    async def div(self):
         """Shows current wordline divergence"""
-        numbers = uniform(0, 10)
-        divergence = str(numbers)
-        msg = "Current wordline divergence is {}".format(divergence[:8])
+        date = datetime.today()
+        calc = (date.day + date.month + date.year) / 13.35
+        div = "{}.{}".format(date.month % 4, str(calc)[6:12])
+
+        msg = "Current divergence is: {}".format(div)
         await self.send(msg)
 
     @commands.command()
@@ -216,7 +202,8 @@ class General:
 
         embeded = discord.Embed(title=ctx.message.server.name, description='Server Info', color=0xEE8700)
         embeded.set_thumbnail(url=ctx.message.server.icon_url)
-        embeded.add_field(name="Created on:", value=ctx.message.server.created_at.strftime('%d %B %Y at %H:%M UTC'), inline=True)
+        embeded.add_field(name="Created on:", value=ctx.message.server.created_at.strftime('%d %B %Y at %H:%M UTC'), inline=False)
+        embeded.add_field(name="Server ID:", value=ctx.message.server.id, inline=False)
         embeded.add_field(name="Users on server:", value=ctx.message.server.member_count, inline=True)
         embeded.add_field(name="Server owner:", value=ctx.message.server.owner, inline=True)
 
@@ -234,13 +221,16 @@ class General:
     async def user(self, ctx, *, name: str):
         """Shows user info"""
 
-        members = self.get_members(ctx, name)
+        members = utils.get_members(ctx, name)
 
         if len(members) > 4:
             await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
             return
 
-        member = await self.get_member(ctx, name, members)
+        member = await utils.get_member(self.bot, ctx, name, members)
+
+        if member is None:
+            return
 
         roles = []
         server_counter = 0
@@ -258,7 +248,7 @@ class General:
         created_time_ago = datetime.today() - member.created_at
         joined_time_ago = datetime.today() - member.joined_at
 
-        # TODO: Feels kinda bad but what else can I do?
+        # TODO: Feels like this can be done in some other way
         created_case = "days" if created_time_ago.days > 1 else "day"
         joined_case = "days" if joined_time_ago.days > 1 else "day"
 
@@ -288,18 +278,25 @@ class General:
     async def avatar(self, ctx, *, name: str):
         """Shows user avatar url"""
 
-        members = self.get_members(ctx, name)
+        members = utils.get_members(ctx, name)
 
         if len(members) > 4:
             await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
             return
 
-        member = await self.get_member(ctx, name, members)
+        member = await utils.get_member(self.bot, ctx, name, members)
+
+        if member is None:
+            return
+
+        if not member.avatar_url:
+            await self.send("This user doesn't have avatar.")
+            return
 
         if len(members) > 1:
             await self.send("There are more members you might be interested in:\n" + "\n".join(members) + "\n\n{}".format(member.avatar_url))
         else:
-            await self.send(member.avatar_url)
+            await self.send("Take a closer look at this avatar\n{}".format(member.avatar_url))
 
     # Wiki command group
     @commands.group(pass_context=True)
