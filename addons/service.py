@@ -12,7 +12,7 @@ class Service:
     # Construct
     def __init__(self, bot):
         self.bot = bot
-        self.checks = utils.PermissionChecks(self.bot)
+        self.checks = utils.PermissionChecks(bot)
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
     # Send message

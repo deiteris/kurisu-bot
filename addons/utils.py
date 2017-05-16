@@ -10,7 +10,7 @@ async def db_check(bot, msg, cursor, table: str):
     :param msg: Message
     :param cursor: Database cursor
     :param table: Table name
-    :return: Boolean: True or False
+    :return: Bool
     """
 
     try:

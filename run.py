@@ -37,8 +37,11 @@ with open('config.json') as data:
 # Initialize db connection
 bot.db = sqlite3.connect('main.db')
 
-# Global roles storage
+# Global storages
+# Roles
 bot.access_roles = {}
+# Mutes
+bot.unmute_timers = {}
 
 
 # TESTING: Declare and register empty events, then work with them in "events" addon.
@@ -83,6 +86,8 @@ async def on_ready():
     for server in bot.servers:
         # Add server to access_roles storage
         bot.access_roles.update({server.id: {}})
+        # Add server to unmute_timers storage
+        bot.unmute_timers.update({server.id: {}})
         # Preload roles in storage
         cursor.execute("SELECT * FROM roles WHERE serverid={}".format(server.id))
         data = cursor.fetchall()
