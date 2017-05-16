@@ -44,37 +44,6 @@ bot.access_roles = {}
 bot.unmute_timers = {}
 
 
-# TESTING: Declare and register empty events, then work with them in "events" addon.
-# I have no idea how it works since I haven't seen this usage and it's undocumented.
-@bot.event
-async def on_command_error(ecx, ctx): pass
-
-
-@bot.event
-async def on_server_join(server): pass
-
-
-# @bot.event
-# async def on_member_update(before, after): pass
-
-
-@bot.event
-async def on_member_join(member): pass
-
-
-# @bot.event
-# async def on_member_remove(member): pass
-
-
-@bot.event
-async def on_message(msg):
-
-    if msg.author.bot:
-        return
-
-    await bot.process_commands(msg)
-
-
 # Doesn't change since bot is already running. No reason to put it in "events".
 @bot.event
 async def on_ready():

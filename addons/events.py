@@ -61,6 +61,7 @@ class Events:
     #        await bot.send_message(member.server.default_channel, "Labomem {} has left our laboratory.".format(str.capitalize(member.name)))
 
     async def on_message(self, msg):
+
         if msg.author.bot:
             return
 
