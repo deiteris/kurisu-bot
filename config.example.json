@@ -19,6 +19,12 @@
 	"__extensions_comment": "That's it. Extensions don't require any changes.",
 	"extensions": [
 		{
+			"name": "addons.events"
+		},
+		{
+			"name": "addons.service"
+		},
+		{
 			"name": "addons.general"
 		},
 		{
@@ -28,10 +34,10 @@
 			"name": "addons.voice"
 		},
 		{
-			"name": "addons.service"
+			"name": "addons.mod"
 		},
 		{
-			"name": "addons.mod"
+			"name": "addons.utils"
 		}
 	]
 }
