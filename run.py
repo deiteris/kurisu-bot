@@ -36,6 +36,10 @@ with open('config.json') as data:
 
 # Initialize db connection
 bot.db = sqlite3.connect('main.db')
+# Create tables for muted members and access roles. Necessary for basic functionality.
+bot.db.execute('CREATE TABLE IF NOT EXISTS mutes (id integer NOT NULL primary key AUTOINCREMENT, member_id varchar, member_name varchar, mute_time integer, server_id varchar)')
+bot.db.execute('CREATE TABLE IF NOT EXISTS roles (id integer NOT NULL primary key AUTOINCREMENT, role varchar, level int, serverid varchar)')
+bot.db.commit()
 
 # Global storages
 # Roles
@@ -48,38 +52,46 @@ bot.unmute_timers = {}
 @bot.event
 async def on_ready():
 
+    # Used for 'uptime' command
     bot.start_time = datetime.today()
-    cursor = bot.db.cursor()
+
     print("{} has started!".format(bot.user.name))
     print("Current time is {}".format(bot.start_time))
+
+    cursor = bot.db.cursor()
     for server in bot.servers:
+
         # Add server to access_roles storage
         bot.access_roles.update({server.id: {}})
         # Add server to unmute_timers storage
         bot.unmute_timers.update({server.id: {}})
+
         # Preload roles in storage
         cursor.execute("SELECT * FROM roles WHERE serverid={}".format(server.id))
-        data = cursor.fetchall()
-        if data:
-            for row in data:
+        roles_data = cursor.fetchall()
+        if roles_data:
+            for row in roles_data:
                 # row[0] - ID
                 # row[1] - role name
                 # row[2] - role level
                 # row[3] - server id
                 bot.access_roles[server.id].update({row[1]: row[2]})
+
         # NOTE: custom storage for settings was made in API
         server.settings.update({'wiki_lang': "en"})
         print("Connected to {} with {:,} members!".format(server.name, server.member_count))
-    cursor.close()
-    await bot.change_presence(game=discord.Game(name='Kurisu, help | El.Psy.Kongroo'))
 
-# Load extensions
-print("Loading addons:")
-for extension in bot.config['extensions']:
-    try:
-        bot.load_extension(extension['name'])
-    except Exception as e:
-        print('{} failed to load.\n{}: {}'.format(extension['name'], type(e).__name__, e))
+    cursor.close()
+
+    # Load extensions after we have connected to servers
+    print("Loading addons:")
+    for extension in bot.config['extensions']:
+        try:
+            bot.load_extension(extension['name'])
+        except Exception as e:
+            print('{} failed to load.\n{}: {}'.format(extension['name'], type(e).__name__, e))
+
+    await bot.change_presence(game=discord.Game(name='Kurisu, help | El.Psy.Kongroo'))
 
 # Set bot type in config. Will use token by default.
 if bot.config['type'] == "user":

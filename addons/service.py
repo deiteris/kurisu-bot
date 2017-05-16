@@ -201,7 +201,7 @@ class Service:
             ]
             db.executemany('INSERT INTO sounds VALUES (?)', sounds)
 
-            db.execute('CREATE TABLE IF NOT EXISTS roles (id integer NOT NULL primary key AUTOINCREMENT, role varchar, level int, serverid varchar)')
+
             roles = [
                 ('commander', 3, '132200767799951360'), ('moderator', 2, '132200767799951360')
             ]
