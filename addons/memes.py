@@ -1,4 +1,4 @@
-import utils
+from addons import utils
 from discord.ext import commands
 from random import randrange
 
@@ -24,7 +24,7 @@ class Memes:
 
         cursor = self.bot.db.cursor()
 
-        if not await utils.db_check(self.bot, ctx, cursor, "memes"):
+        if not await utils.db_check(self.bot, ctx.message, cursor, "memes"):
             return
 
         msg = "`Usage: Kurisu, meme <name>`\n```List of memes:\n"
@@ -44,7 +44,7 @@ class Memes:
 
         cursor = self.bot.db.cursor()
 
-        if not await utils.db_check(self.bot, ctx, cursor, "memes"):
+        if not await utils.db_check(self.bot, ctx.message, cursor, "memes"):
             return
 
         if name == "random":

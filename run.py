@@ -6,11 +6,11 @@
 
 # Import dependencies
 import os, sys
-import discord
 import json
 import sqlite3
-from discord.ext import commands
+import discord
 from datetime import datetime
+from discord.ext import commands
 
 description = """
 ハロー, my name is Kurisu Makise.
@@ -27,8 +27,6 @@ os.chdir(dir_path)
 prefixes = commands.when_mentioned_or('Kurisu, ', "kurisu, ", 'k.', 'K.')
 bot = commands.Bot(command_prefix=prefixes, description=description, pm_help=None)
 
-bot.pruning = False  # used to disable leave logs if pruning, maybe.
-
 # Read config
 if not os.path.isfile("config.json"):
     sys.exit("Set up your config.json file first!")
@@ -39,49 +37,30 @@ with open('config.json') as data:
 # Initialize db connection
 bot.db = sqlite3.connect('main.db')
 
-#def get_time_of_day(hour):
-#    return {
-#        0 <= hour < 6:  'Good evening',
-#        6 <= hour < 12: 'Good morning',
-#        12 <= hour < 18: 'Good afternoon',
-#        18 <= hour < 24: 'Good evening'
-#    }[True]
+# Global roles storage
+bot.access_roles = {}
+
+
+# TESTING: Declare and register empty events, then work with them in "events" addon.
+# I have no idea how it works since I haven't seen this usage and it's undocumented.
+@bot.event
+async def on_command_error(ecx, ctx): pass
 
 
 @bot.event
-async def on_command_error(ecx, ctx):
-    if isinstance(ecx, commands.errors.CommandNotFound):
-        await bot.send_message(ctx.message.channel, "I don't understand. Try `Kurisu, help`, baka!")
-    if isinstance(ecx, commands.errors.MissingRequiredArgument):
-        formatter = commands.formatter.HelpFormatter()
-        await bot.send_message(ctx.message.channel, "You are missing required arguments. See the usage:\n{}".format(formatter.format_help_for(ctx, ctx.command)[0]))
+async def on_server_join(server): pass
+
+
+# @bot.event
+# async def on_member_update(before, after): pass
 
 
 @bot.event
-async def on_server_join(server):
-    server.settings.update({'wiki_lang': "en"})
-
-#@bot.event
-#async def on_member_update(before, after):
-#    if str(after.status) == "online" and str(after.bot) != "True" and str(before.status) == "offline":
-#        time_of_day = get_time_of_day(datetime.today().hour)
-#        opt_list = [time_of_day, "Welcome back", "Hello"]
-#        i = randrange(0, len(opt_list))
-#        await bot.send_message(before.server.default_channel, "{}, {}-san!".format(opt_list[i], str.capitalize(before.name)))
+async def on_member_join(member): pass
 
 
-#@bot.event
-#async def on_member_join(member):
-#    if str(member.bot) != "True":
-#        embeded = discord.Embed(title='New Labomem!', description='Labomem {} has joined our laboratory.'.format(str.capitalize(member.name)))
-#        embeded.set_image(url='http://i.imgur.com/HYBdoFe.png')
-#        await bot.send_message(member.server.default_channel, embed=embeded)
-
-
-#@bot.event
-#async def on_member_remove(member):
-#    if str(member.bot) != "True":
-#        await bot.send_message(member.server.default_channel, "Labomem {} has left our laboratory.".format(str.capitalize(member.name)))
+# @bot.event
+# async def on_member_remove(member): pass
 
 
 @bot.event
@@ -90,30 +69,34 @@ async def on_message(msg):
     if msg.author.bot:
         return
 
-    channel = msg.channel
-    content = msg.content.lower()
-
-    if content.startswith("kurisutina"):
-        await bot.send_message(channel, "I told you there is no -tina!")
-        return
-
-    if content in ("nurupo", "nullpo", "ぬるぽ"):
-        await bot.send_message(channel, "Gah!")
-        return
-
     await bot.process_commands(msg)
 
 
+# Doesn't change since bot is already running. No reason to put it in "events".
 @bot.event
 async def on_ready():
 
     bot.start_time = datetime.today()
+    cursor = bot.db.cursor()
     print("{} has started!".format(bot.user.name))
     print("Current time is {}".format(bot.start_time))
     for server in bot.servers:
+        # Add server to access_roles storage
+        bot.access_roles.update({server.id: {}})
+        # Preload roles in storage
+        cursor.execute("SELECT * FROM roles WHERE serverid={}".format(server.id))
+        data = cursor.fetchall()
+        if data:
+            for row in data:
+                # row[0] - ID
+                # row[1] - role name
+                # row[2] - role level
+                # row[3] - server id
+                bot.access_roles[server.id].update({row[1]: row[2]})
         # NOTE: custom storage for settings was made in API
         server.settings.update({'wiki_lang': "en"})
         print("Connected to {} with {:,} members!".format(server.name, server.member_count))
+    cursor.close()
     await bot.change_presence(game=discord.Game(name='Kurisu, help | El.Psy.Kongroo'))
 
 # Load extensions

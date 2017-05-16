@@ -5,7 +5,7 @@ import wolframalpha
 import discord
 import string
 import hashlib
-import utils
+from addons import utils
 from datetime import datetime
 from discord.ext import commands
 from random import randrange, choice
@@ -81,7 +81,7 @@ class General:
     async def google(self, *, query: str):
         """Helps you to google"""
         msg = re.sub('\s+', '+', query)
-        await self.send('http://i.imgur.com/pIp93NT.jpg')
+        await self.send('https://i.imgur.com/pIp93NT.jpg')
         await asyncio.sleep(2.5)
         await self.send('Is there anything you can do by yourself?\nhttps://lmgtfy.com/?q={}'.format(msg))
 
@@ -117,6 +117,7 @@ class General:
         await self.send('SHA512: {}'.format(output))
 
     @commands.command(pass_context=True)
+    @commands.cooldown(1, 3, commands.BucketType.channel)
     async def react(self, ctx, target: str, *, word: str):
         """React to message with regional indicators"""
 
@@ -171,6 +172,11 @@ class General:
     @commands.command()
     async def wolfram(self, *, query: str):
         """Provides access to wolframalpha computational knowledge engine"""
+        if not self.bot.config['wolfram']:
+            await self.send("WolframAlpha API key isn't provided in config.json.\n"
+                            "Visit https://products.wolframalpha.com/api/ and get your key.")
+            return
+
         wa = wolframalpha.Client(self.bot.config['wolfram'])
         result = wa.query(query)
         if result['@success'] == 'false':
@@ -196,20 +202,23 @@ class General:
     @commands.command(pass_context=True)
     async def server(self, ctx):
         """Shows server info"""
-        roles = str(len(ctx.message.server.roles))
-        emojis = str(len(ctx.message.server.emojis))
-        channels = str(len(ctx.message.server.channels))
 
-        embeded = discord.Embed(title=ctx.message.server.name, description='Server Info', color=0xEE8700)
-        embeded.set_thumbnail(url=ctx.message.server.icon_url)
-        embeded.add_field(name="Created on:", value=ctx.message.server.created_at.strftime('%d %B %Y at %H:%M UTC'), inline=False)
-        embeded.add_field(name="Server ID:", value=ctx.message.server.id, inline=False)
-        embeded.add_field(name="Users on server:", value=ctx.message.server.member_count, inline=True)
-        embeded.add_field(name="Server owner:", value=ctx.message.server.owner, inline=True)
+        server = ctx.message.server
 
-        embeded.add_field(name="Default Channel:", value=ctx.message.server.default_channel, inline=True)
-        embeded.add_field(name="Server Region:", value=ctx.message.server.region, inline=True)
-        embeded.add_field(name="Verification Level:", value=ctx.message.server.verification_level, inline=True)
+        roles = str(len(server.roles))
+        emojis = str(len(server.emojis))
+        channels = str(len(server.channels))
+
+        embeded = discord.Embed(title=server.name, description='Server Info', color=0xEE8700)
+        embeded.set_thumbnail(url=server.icon_url)
+        embeded.add_field(name="Created on:", value=server.created_at.strftime('%d %B %Y at %H:%M UTC'), inline=False)
+        embeded.add_field(name="Server ID:", value=server.id, inline=False)
+        embeded.add_field(name="Users on server:", value=server.member_count, inline=True)
+        embeded.add_field(name="Server owner:", value=server.owner, inline=True)
+
+        embeded.add_field(name="Default Channel:", value=server.default_channel, inline=True)
+        embeded.add_field(name="Server Region:", value=server.region, inline=True)
+        embeded.add_field(name="Verification Level:", value=server.verification_level, inline=True)
 
         embeded.add_field(name="Role Count:", value=roles, inline=True)
         embeded.add_field(name="Emoji Count:", value=emojis, inline=True)
@@ -221,13 +230,15 @@ class General:
     async def user(self, ctx, *, name: str):
         """Shows user info"""
 
-        members = utils.get_members(ctx, name)
+        members = utils.get_members(ctx.message, name)
 
         if len(members) > 4:
-            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            await self.bot.say("There are too many results. Please be more specific.\n\n"
+                               "Here is a list with suggestions:\n"
+                               "{}".format("\n".join(members)))
             return
 
-        member = await utils.get_member(self.bot, ctx, name, members)
+        member = await utils.get_member(self.bot, ctx.message, name, members)
 
         if member is None:
             return
@@ -278,13 +289,15 @@ class General:
     async def avatar(self, ctx, *, name: str):
         """Shows user avatar url"""
 
-        members = utils.get_members(ctx, name)
+        members = utils.get_members(ctx.message, name)
 
         if len(members) > 4:
-            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            await self.bot.say("There are too many results. Please be more specific.\n\n"
+                               "Here is a list with suggestions:\n"
+                               "{}".format("\n".join(members)))
             return
 
-        member = await utils.get_member(self.bot, ctx, name, members)
+        member = await utils.get_member(self.bot, ctx.message, name, members)
 
         if member is None:
             return

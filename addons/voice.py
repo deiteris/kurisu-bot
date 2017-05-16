@@ -1,7 +1,7 @@
 import asyncio
-import utils
 import discord
 import shutil
+from addons import utils
 from discord.ext import commands
 from random import randrange
 
@@ -94,15 +94,16 @@ class VoiceState:
                 self.timer_task.cancel()
 
 
-class Play:
+class Voice:
     """
-    Sound Commands
+    Voice/play Commands
     """
 
     # Construct
     def __init__(self, bot):
         self.bot = bot
         self.voice_states = {}
+        self.checks = utils.PermissionChecks(self.bot)
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
     # Send message
@@ -188,7 +189,7 @@ class Play:
 
         cursor = self.bot.db.cursor()
 
-        if not await utils.db_check(self.bot, ctx, cursor, "sounds"):
+        if not await utils.db_check(self.bot, ctx.message, cursor, "sounds"):
             return
 
         msg = "`Usage: Kurisu, play <name>`\n```List of sounds:\n"
@@ -208,7 +209,7 @@ class Play:
 
         cursor = self.bot.db.cursor()
 
-        if not await utils.db_check(self.bot, ctx, cursor, "sounds"):
+        if not await utils.db_check(self.bot, ctx.message, cursor, "sounds"):
             return
 
         if name == "random":
@@ -234,8 +235,7 @@ class Play:
         """Summons the bot to join your voice channel."""
 
         if ctx.message.server.id != "132200767799951360":
-            if ctx.message.author.id != self.bot.config['owner']:
-                await self.send("Access denied.")
+            if not await self.checks.check_perms(ctx.message, 1):
                 return
 
         vc = ctx.message.author.voice_channel
@@ -257,8 +257,7 @@ class Play:
         """Plays youtube video. Usage: Kurisu, play-u <url>"""
 
         if ctx.message.server.id != "132200767799951360":
-            if ctx.message.author.id != self.bot.config['owner']:
-                await self.send("Access denied.")
+            if not await self.checks.check_perms(ctx.message, 1):
                 return
 
         state = self.get_voice_state(ctx.message.server)
@@ -290,8 +289,7 @@ class Play:
         """
 
         if ctx.message.server.id != "132200767799951360":
-            if ctx.message.author.id != self.bot.config['owner']:
-                await self.send("Access denied.")
+            if not await self.checks.check_perms(ctx.message, 1):
                 return
 
         server = ctx.message.server
@@ -332,18 +330,18 @@ class Play:
         voter = ctx.message.author
         if voter == state.current.requester:
             await self.bot.say('Requester requested skipping song...')
+            state.timer_task.cancel()
             state.skip()
         elif voter.id not in state.skip_votes:
             state.skip_votes.add(voter.id)
-            voice_members = len(state.voice.channel.voice_members)
-            votes_to_skip = voice_members % 2
             total_votes = len(state.skip_votes)
 
-            if total_votes >= votes_to_skip:
+            if total_votes >= 3:
                 await self.bot.say('Skip vote passed, skipping song...')
+                state.timer_task.cancel()
                 state.skip()
             else:
-                await self.bot.say('Skip vote added, currently at [{}/{}]'.format(total_votes, votes_to_skip))
+                await self.bot.say('Skip vote added, currently at [{}/3]'.format(total_votes))
         else:
             await self.bot.say('You have already voted to skip this song.')
 
@@ -361,4 +359,4 @@ class Play:
 
 
 def setup(bot):
-    bot.add_cog(Play(bot))
+    bot.add_cog(Voice(bot))

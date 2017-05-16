@@ -1,6 +1,6 @@
 import discord
 import asyncio
-import utils
+from addons import utils
 from discord.ext import commands
 
 
@@ -13,6 +13,7 @@ class Mod:
     def __init__(self, bot):
         self.bot = bot
         self.tasks_storage = {}
+        self.checks = utils.PermissionChecks(self.bot)
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
     # Send message
@@ -54,8 +55,7 @@ class Mod:
     async def mute_t(self, ctx, user: str, time: int):
         """Mute for specific time"""
 
-        if ctx.message.author.id != self.bot.config['owner']:
-            await self.send("Access denied.")
+        if not await self.checks.check_perms(ctx.message, 2):
             return
 
         # Check for permission before proceed
@@ -68,14 +68,16 @@ class Mod:
         elif not bot_permissions.mute_members:
             await self.send("I'm not able to mute voice without `Mute Members` permission")
 
-        members = utils.get_members(ctx, user)
+        members = utils.get_members(ctx.message, user)
 
         # We want to mute specific member, so limit this to one to avoid wrong member
         if len(members) > 1:
-            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            await self.bot.say("There are too many results. Please be more specific.\n\n"
+                               "Here is a list with suggestions:\n"
+                               "{}".format("\n".join(members)))
             return
 
-        member = await utils.get_member(self.bot, ctx, user, members)
+        member = await utils.get_member(self.bot, ctx.message, user, members)
 
         if member is None:
             return
@@ -97,8 +99,7 @@ class Mod:
     async def mute(self, ctx, user: str):
         """Permanent mute command"""
 
-        if ctx.message.author.id != self.bot.config['owner']:
-            await self.send("Access denied.")
+        if not await self.checks.check_perms(ctx.message, 2):
             return
 
         # Check for permission before proceed
@@ -109,14 +110,16 @@ class Mod:
             await self.send("I'm not able to manage permissions without `Manage Roles` permission")
             return
 
-        members = utils.get_members(ctx, user)
+        members = utils.get_members(ctx.message, user)
 
         # We want to mute specific member, so limit this to one to avoid wrong member
         if len(members) > 1:
-            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            await self.bot.say("There are too many results. Please be more specific.\n\n"
+                               "Here is a list with suggestions:\n"
+                               "{}".format("\n".join(members)))
             return
 
-        member = await utils.get_member(self.bot, ctx, user, members)
+        member = await utils.get_member(self.bot, ctx.message, user, members)
 
         if member is None:
             return
@@ -130,8 +133,7 @@ class Mod:
     async def unmute(self, ctx, user: str):
         """Unmute command"""
 
-        if ctx.message.author.id != self.bot.config['owner']:
-            await self.send("Access denied.")
+        if not await self.checks.check_perms(ctx.message, 2):
             return
 
         # Check for permission before proceed
@@ -142,14 +144,16 @@ class Mod:
             await self.send("I'm not able to manage permissions without `Manage Roles` permission")
             return
 
-        members = utils.get_members(ctx, user)
+        members = utils.get_members(ctx.message, user)
 
         # We want to mute specific member, so limit this to one to avoid wrong member
         if len(members) > 1:
-            await self.bot.say("There are too many results. Please be more specific.\n\nHere is a list with suggestions:\n" + "\n".join(members))
+            await self.bot.say("There are too many results. Please be more specific.\n\n"
+                               "Here is a list with suggestions:\n"
+                               "{}".format("\n".join(members)))
             return
 
-        member = await utils.get_member(self.bot, ctx, user, members)
+        member = await utils.get_member(self.bot, ctx.message, user, members)
 
         if member is None:
             return
