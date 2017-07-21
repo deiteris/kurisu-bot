@@ -14,32 +14,47 @@ if not discord.opus.is_loaded():
     # note that on windows this DLL is automatically provided for you
     discord.opus.load_opus('/usr/lib/libopus.so')
 
+class Song:
 
-class QueueItem:
-
-    def __init__(self, channel, requester, player, song):
+    def __init__(self, title, requester, url, uploader, is_live, duration):
+        self.title = title
+        self.url = url
+        self.uploader = uploader
+        self.is_live = is_live
+        self.duration = duration
         self.requester = requester
-        self.channel = channel
-        self.player = player
-        self.song = song
         self.current_position = 0
         self.task = None
 
     def __str__(self):
-        fmt = '*{0.title}* uploaded by {0.uploader} and requested by {1.display_name}'
-        if self.player.is_live:
+        fmt = '*{0}* uploaded by {1} and requested by {2.display_name}'
+        if self.is_live:
             fmt = fmt + ' [live stream]'
-        elif self.player.duration:
-            fmt = fmt + ' [length: {0[0]}:{0[1]}m/{1[0]}:{1[1]}m]'.format(divmod(self.player.duration, 60), divmod(self.current_position, 60))
-        return fmt.format(self.player, self.requester)
+        elif self.duration:
+            fmt = fmt + ' [length: {0[0]}:{0[1]}m/{1[0]}:{1[1]}m]'.format(divmod(self.duration, 60), divmod(self.current_position, 60))
+        return fmt.format(self.title, self.uploader, self.requester)
+
+    def start_counter(self):
+        self.task = asyncio.get_event_loop().create_task(self.current_position_timer())
+
+    def stop_counter(self):
+        self.task.cancel()
 
     async def current_position_timer(self):
-        while self.current_position <= self.player.duration:
-            try:
+        try:
+            while self.current_position <= self.duration:
                 self.current_position += 1
                 await asyncio.sleep(1)
-            except asyncio.CancelledError:
-                break
+        except asyncio.CancelledError:
+            pass
+
+
+class QueueItem:
+
+    def __init__(self, channel, song):
+        self.channel = channel
+        self.song = song
+        self.player = None
 
 
 class VoiceState:
@@ -52,7 +67,8 @@ class VoiceState:
         self.voice_module = voice_module
         self.skip_votes = set()  # a set of user_ids that voted
         self.queue = deque()
-        self.current = {'request': None, 'player': None}
+        self.current = None
+        self.current_sound = None
         self.play_next_song = asyncio.Event()
         self.task = None
         self.volume = 0.2
@@ -60,12 +76,12 @@ class VoiceState:
     def do_skip(self):
         self.skip_votes.clear()
         if self.is_playing():
-            self.current['player'].stop()
-            self.current['request'].task.cancel()
+            self.current.player.stop()
+            self.current.song.stop_counter()
 
     async def skip(self, channel, voter):
 
-        if voter == self.current['request'].requester:
+        if voter == self.current.song.requester:
             await self.bot.send_message(channel, 'Requester requested skipping song...')
             self.do_skip()
         elif voter.id not in self.skip_votes:
@@ -99,16 +115,21 @@ class VoiceState:
             # NOTE: Workaround for weird youtube-dl (or discord.py) bug.
             # We put song in QueueItem, so we can create new player in audio_player_task().
             # Here we create and put player only to extract and use metadata.
-            item = QueueItem(channel, requester, player, song)
+            # FIXME: FFMPEG just don't want to go if player was loaded, but wasn't used =\
+            player.start()
+            player.stop()
+
+            song = Song(player.title, requester, player.url, player.uploader, player.is_live, player.duration)
+            item = QueueItem(channel, song)
             self.queue.append(item)
             self.get_task()
-            return item
+            return song
 
     def is_playing(self):
-        if self.voice_client is None or self.current['player'] is None:
+        if self.voice_client is None or self.current.player is None:
             return False
 
-        player = self.current['player']
+        player = self.current.player
         return not player.is_done()
 
     def stop(self):
@@ -116,8 +137,8 @@ class VoiceState:
 
         if self.is_playing():
             # No need to cancel current_position_timer if we aren't playing anything.
-            self.current['request'].task.cancel()
-            self.current['player'].stop()
+            self.current.song.stop_counter()
+            self.current.player.stop()
 
     def toggle_next(self):
         self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
@@ -132,7 +153,7 @@ class VoiceState:
         if self.is_playing():
             self.volume = value / 100
 
-            player = self.current['player']
+            player = self.current.player
             player.volume = self.volume
 
     async def disconnect(self):
@@ -150,43 +171,39 @@ class VoiceState:
             'default_search': 'auto',
             'quiet': True,
         }
-        while True:
-            try:
-                self.play_next_song.clear()
-                self.current['request'] = self.queue.popleft()
+        try:
+            while True:
 
-                # FIXME: FFMPEG just don't want to go if player was loaded, but wasn't used =\
-                self.current['request'].player.start()
-                self.current['request'].player.stop()
+                self.play_next_song.clear()
+                self.current = self.queue.popleft()
 
                 # NOTE: Workaround for weird youtube-dl (or discord.py) bug.
                 # If our queue has more than 3-4 entries, there's a possibility,
                 # that entries after 2nd or 3rd entry will be invalidated and skipped.
                 # 2x ffmpeg tasks and more memory consumption, but seems to be working stable.
-                self.current['player'] = await self.voice_client.create_ytdl_player(self.current['request'].song, ytdl_options=ytdl_opts, after=self.toggle_next)
-                self.current['player'].volume = self.volume
+                self.current.player = await self.voice_client.create_ytdl_player(self.current.song.url, ytdl_options=ytdl_opts, after=self.toggle_next)
+                self.current.player.volume = self.volume
 
                 # We don't need to activate timer if it's a live stream
-                if not self.current['player'].is_live:
+                if not self.current.player.is_live:
                     # Create QueueItem.current_position_timer task and put it in QueueItem.task
-                    self.current['request'].task = self.bot.loop.create_task(self.current['request'].current_position_timer())
+                    self.current.song.start_counter()
 
-                self.current['player'].start()
-                await self.bot.send_message(self.current['request'].channel, 'Now playing ' + str(self.current['request']))
+                self.current.player.start()
+                await self.bot.send_message(self.current.channel, 'Now playing ' + str(self.current.song))
 
                 await self.play_next_song.wait()
 
                 if not self.queue:
-                    await self.bot.send_message(self.current['request'].channel, "Queue is empty! Disconnecting...")
-                    self.voice_module.remove_voice_state(self.current['request'].channel.server)
+                    await self.bot.send_message(self.current.channel, "Queue is empty! Disconnecting...")
+                    self.voice_module.remove_voice_state(self.current.channel.server)
                     await self.disconnect()
                     break
 
-            except asyncio.CancelledError:
-                self.voice_module.remove_voice_state(self.current['request'].channel.server)
-                await self.disconnect()
-                await self.bot.send_message(self.current['request'].channel, "Player stopped.")
-                break
+        except asyncio.CancelledError:
+            self.voice_module.remove_voice_state(self.current.channel.server)
+            await self.disconnect()
+            await self.bot.send_message(self.current.channel, "Player stopped.")
 
 
 class Voice:
@@ -308,7 +325,7 @@ class Voice:
 
         state = self.get_voice_state(ctx.message.server)
 
-        if state.is_playing():
+        if state.is_playing() or state.current_sound:
             return
 
         success = await ctx.invoke(self.summon)
@@ -317,13 +334,12 @@ class Voice:
 
         try:
             player = state.voice_client.create_ffmpeg_player('sounds/' + snd + '.mp3')
-            state.current['player'] = player
+            state.current_sound = player
             player.start()
             while player.is_playing():
                 await asyncio.sleep(0.2)
             else:
                 try:
-                    state.current['player'] = None
                     await state.disconnect()
                     self.remove_voice_state(ctx.message.server)
                 except:
@@ -331,6 +347,8 @@ class Voice:
         except Exception as e:
             fmt = 'An error occurred while processing this request: ```py\n{}: {}\n```'
             await self.bot.send_message(ctx.message.channel, fmt.format(type(e).__name__, e))
+
+        state.current_sound = None
 
     @commands.command(pass_context=True, name="play-u", no_pm=True)
     async def play_u(self, ctx, *, song: str):
@@ -341,6 +359,9 @@ class Voice:
                 return
 
         state = self.get_voice_state(ctx.message.server)
+
+        if state.current_sound is not None:
+            return
 
         success = await ctx.invoke(self.summon)
         if not success:
@@ -382,7 +403,7 @@ class Voice:
 
         state = self.get_voice_state(ctx.message.server)
 
-        if state.current['request'] is None:
+        if state.current is None:
             await self.send('Not playing anything.')
             return
 
@@ -395,11 +416,11 @@ class Voice:
 
         state = self.get_voice_state(ctx.message.server)
 
-        if state.current['request'] is None:
+        if state.current is None:
             await self.bot.say('Not playing anything.')
             return
 
-        await self.bot.say('Now playing {}'.format(state.current['request']))
+        await self.bot.say('Now playing {}'.format(state.current.song))
 
     @commands.command(pass_context=True, no_pm=True)
     async def queue(self, ctx):
@@ -407,7 +428,7 @@ class Voice:
 
         state = self.get_voice_state(ctx.message.server)
 
-        if state.current['request'] is None:
+        if state.current is None:
             await self.send('Not playing anything.')
             return
 
@@ -416,7 +437,7 @@ class Voice:
         for song in state.queue:
             count += 1
             songs_queue.append("{}. ".format(count) + str(song))
-        await self.send("Current queue:\n1. {}\n{}".format(state.current['request'], "\n".join(songs_queue)))
+        await self.send("Current queue:\n1. {}\n{}".format(state.current.song, "\n".join(songs_queue)))
 
     @commands.command(pass_context=True, no_pm=True)
     async def shuffle(self, ctx):
@@ -428,7 +449,7 @@ class Voice:
 
         state = self.get_voice_state(ctx.message.server)
 
-        if state.current['request'] is None:
+        if state.current is None:
             await self.send('Not playing anything.')
             return
 
