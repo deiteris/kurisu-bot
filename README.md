@@ -35,7 +35,7 @@ A discord chat bot which combines different simple features for entertainment pu
 
 # Commands access system
 The system is pretty simple: the higher level role has, the more commands its owner can access. This means that if role has level 3, its owner can use service, mod and music commands.
-Most commands in 'service' addon require at least level 3 or greater.
-Commands in 'mod' addon require at least level 2 or greater.
-Some music commands in 'voice' addon require at least level 1 or greater (to prevent abuse).
-There are some commands in 'service' addon, which can be accessed only by owner or level 9000 or greater which can be considered as co-owner.
+<p>Most commands in 'service' addon require at least level 3 or greater.</p>
+<p>Commands in 'mod' addon require at least level 2 or greater.</p>
+<p>Some music commands in 'voice' addon require at least level 1 or greater (to prevent abuse).</p>
+<p>There are some commands in 'service' addon, which can be accessed only by owner or level 9000 or greater which can be considered as co-owner.</p>
