@@ -25,7 +25,7 @@ class Events:
     async def on_server_join(self, server):
         self.bot.access_roles.update({server.id: {}})
         self.bot.unmute_timers.update({server.id: {}})
-        server.settings.update({'wiki_lang': "en"})
+        self.bot.servers_settings.update({server.id: {'wiki_lang': "en"}})
 
     # async def on_member_update(before, after):
     #    if str(after.status) == "online" and str(after.bot) != "True" and str(before.status) == "offline":

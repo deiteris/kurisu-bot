@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import os, sys
 from addons import utils
 from discord.ext import commands
 
@@ -27,7 +28,7 @@ class Service:
         if not await self.checks.check_perms(ctx.message, 9000):
             return
 
-        # Reload configuration file so we can apply new settings on the fly
+        # Reload configuration file so we (probably) can apply some settings on the fly
         # Might be useful
         with open('config.json') as data:
             self.bot.config = json.load(data)
@@ -47,6 +48,39 @@ class Service:
             except Exception as e:
                 print('{} failed to load.\n{}: {}'.format(extension['name'], type(e).__name__, e))
         await self.send("Reload complete!")
+
+    @commands.command(pass_context=True)
+    async def switch(self, ctx):
+        """Switches account between user and bot and shutting down bot (owner only)"""
+
+        if not await self.checks.check_perms(ctx.message, 9000):
+            return
+
+        filename = 'config.json'
+
+        if self.bot.config['type'] == 'user':
+            self.bot.config['type'] = 'bot'
+        else:
+            self.bot.config['type'] = 'user'
+
+        os.remove(filename)
+        with open(filename, 'w') as file:
+            json.dump(self.bot.config, file, indent=4)
+
+        await self.send("Account switch completed! Restarting...")
+
+        sys.exit()
+
+    @commands.command(pass_context=True)
+    async def shutdown(self, ctx):
+        """This kills the bot (owner only)"""
+
+        if not await self.checks.check_perms(ctx.message, 9000):
+            return
+
+        await self.send("Shutting down...")
+
+        sys.exit()
 
     @commands.group(pass_context=True)
     async def roles(self, ctx):
@@ -96,7 +130,7 @@ class Service:
             return
 
         msg = "```List of roles:\n"
-        cursor.execute("SELECT * FROM roles WHERE serverid={}".format(ctx.message.server.id))
+        cursor.execute("SELECT * FROM roles WHERE serverid=?", (ctx.message.server.id,))
         data = cursor.fetchall()
         cursor.close()
         if data:
@@ -200,7 +234,6 @@ class Service:
                 ('tuturio',), ('angry',)
             ]
             db.executemany('INSERT INTO sounds VALUES (?)', sounds)
-
 
             roles = [
                 ('commander', 3, '132200767799951360'), ('moderator', 2, '132200767799951360')

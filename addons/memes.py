@@ -54,16 +54,17 @@ class Memes:
             for row in data:
                 memes.append(row[1])
             i = randrange(0, len(memes))
-
-            await self.send(memes[i])
+            meme = memes[i]
         else:
             cursor.execute("SELECT * FROM memes WHERE name=?", (name,))
             row = cursor.fetchone()
+            if not row:
+                await self.bot.send_message(ctx.message.channel, "Meme not found!")
+                return
             meme = row[1]
 
-            await self.send(meme)
-
         cursor.close()
+        await self.send(meme)
 
 
 # Load the extension

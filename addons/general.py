@@ -27,13 +27,6 @@ class General:
 
     # Commands
     @commands.command()
-    async def ping(self):
-        """Simple bot ping"""
-        opt_list = ["Yes?", "Huh?", "What's the matter?"]
-        i = randrange(0, len(opt_list))
-        await self.send(opt_list[i])
-
-    @commands.command()
     async def div(self):
         """Shows current wordline divergence"""
         date = datetime.today()
@@ -59,12 +52,16 @@ class General:
             i = randrange(0, len(pins))
             if not pins[i].attachments:
                 pins[i].attachments = [{'url': ""}]
-            await self.send("{}: {} {}".format(pins[i].author, pins[i].content, pins[i].attachments[0]['url']))
+            if pins[i].author.nick:
+                author = "{} ({})".format(pins[i].author, pins[i].author.nick)
+            else:
+                author = "{}".format(pins[i].author)
+            await self.send("{}: {} {}".format(author, pins[i].content, pins[i].attachments[0]['url']))
         else:
             await self.send("There are no pinned messages in this channel!")
 
-    @commands.command()
-    async def passgen(self, length: int):
+    @commands.command(pass_context=True, no_pm=False)
+    async def passgen(self, ctx, length: int):
         """Password generator"""
         letters = string.ascii_letters
         digits = string.digits
@@ -75,7 +72,7 @@ class General:
         while i < length:
             i += 1
             password += "".join(choice(chars))
-        await self.send(password)
+        await self.bot.send_message(ctx.message.author, password)
 
     @commands.command()
     async def google(self, *, query: str):
@@ -151,21 +148,19 @@ class General:
 
         if target == "me":
             await react_to(ctx.message, self.bot, word)
-            return
-
-        # Use bot API capabilities
-        #try:
-        #    message = await self.bot.get_message(ctx.message.channel, msg_id)
-        #    for letter in letters:
-        #        await self.bot.add_reaction(message, emojis[letter.lower()])
-        #except discord.NotFound:
-        #    await self.send('Message not found!')
-
-        # Backward compatibility if bot runs as user
-        async for message in self.bot.logs_from(ctx.message.channel, limit=70):
-            if str(message.id) == target:
-                await react_to(message, self.bot, word)
-                return
+        else:
+            # Backward compatibility if bot runs as user
+            if self.bot.config['type'] == "user":
+                async for message in self.bot.logs_from(ctx.message.channel, limit=70):
+                    if message.id == target:
+                        await react_to(message, self.bot, word)
+                        break
+            else:
+                try:
+                    message = await self.bot.get_message(ctx.message.channel, target)
+                    await react_to(message, self.bot, word)
+                except discord.NotFound:
+                    await self.send('Message not found!')
 
     # Credits to NotSoSuper#8800
     # https://github.com/NotSoSuper/NotSoBot
@@ -230,18 +225,12 @@ class General:
     async def user(self, ctx, *, name: str):
         """Shows user info"""
 
-        members = utils.get_members(ctx.message, name)
+        members = await utils.get_members(self.bot, ctx.message, name)
 
-        if len(members) > 4:
-            await self.bot.say("There are too many results. Please be more specific.\n\n"
-                               "Here is a list with suggestions:\n"
-                               "{}".format("\n".join(members)))
+        if members is None:
             return
 
-        member = await utils.get_member(self.bot, ctx.message, name, members)
-
-        if member is None:
-            return
+        member = ctx.message.server.get_member_named(members[0])
 
         roles = []
         server_counter = 0
@@ -289,18 +278,12 @@ class General:
     async def avatar(self, ctx, *, name: str):
         """Shows user avatar url"""
 
-        members = utils.get_members(ctx.message, name)
+        members = await utils.get_members(self.bot, ctx.message, name)
 
-        if len(members) > 4:
-            await self.bot.say("There are too many results. Please be more specific.\n\n"
-                               "Here is a list with suggestions:\n"
-                               "{}".format("\n".join(members)))
+        if members is None:
             return
 
-        member = await utils.get_member(self.bot, ctx.message, name, members)
-
-        if member is None:
-            return
+        member = ctx.message.server.get_member_named(members[0])
 
         if not member.avatar_url:
             await self.send("This user doesn't have avatar.")
@@ -328,7 +311,10 @@ class General:
     @wiki.command(name="search", pass_context=True)
     async def wiki_search(self, ctx, *, query: str):
         """Searches article on wiki"""
-        wikipedia.set_lang(ctx.message.server.settings['wiki_lang'])
+        server = ctx.message.server
+
+        wikipedia.set_lang(self.bot.servers_settings[server.id]['wiki_lang'])
+
         try:
             msg = wikipedia.summary('{}'.format(query), sentences=10).strip()
             await self.send(msg)
@@ -340,7 +326,9 @@ class General:
     @wiki.command(name="lang", pass_context=True)
     async def wiki_lang(self, ctx, lang: str):
         """Sets wiki language. Format: en"""
-        ctx.message.server.settings.update({'wiki_lang': lang})
+        server = ctx.message.server
+
+        self.bot.servers_settings.update({server.id: {'wiki_lang': lang}})
         await self.send("`Wiki language has been set to {}`".format(lang))
 
 

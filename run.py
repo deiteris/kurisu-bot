@@ -46,6 +46,8 @@ bot.db.commit()
 bot.access_roles = {}
 # Mutes
 bot.unmute_timers = {}
+# Per server settings
+bot.servers_settings = {}
 
 
 # Doesn't change since bot is already running. No reason to put it in "events".
@@ -65,6 +67,8 @@ async def on_ready():
         bot.access_roles.update({server.id: {}})
         # Add server to unmute_timers storage
         bot.unmute_timers.update({server.id: {}})
+        # Add server and default settings to servers_settings storage
+        bot.servers_settings.update({server.id: {'wiki_lang': 'en'}})
 
         # Preload roles in storage
         cursor.execute("SELECT * FROM roles WHERE serverid={}".format(server.id))
@@ -77,8 +81,6 @@ async def on_ready():
                 # row[3] - server id
                 bot.access_roles[server.id].update({row[1]: row[2]})
 
-        # NOTE: custom storage for settings was made in API
-        server.settings.update({'wiki_lang': "en"})
         print("Connected to {} with {:,} members!".format(server.name, server.member_count))
 
     cursor.close()

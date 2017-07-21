@@ -133,22 +133,15 @@ class Mod:
         elif not bot_permissions.mute_members:
             await self.send("I'm not able to mute voice without `Mute Members` permission.")
 
-        members = utils.get_members(msg, user)
+        members = await utils.get_members(self.bot, ctx.message, user)
 
-        # We want to mute specific member, so limit this to one to avoid wrong member
-        if len(members) > 1:
-            await self.bot.say("There are too many results. Please be more specific.\n\n"
-                               "Here is a list with suggestions:\n"
-                               "{}".format("\n".join(members)))
+        if members is None:
             return
 
-        member = await utils.get_member(self.bot, msg, user, members)
-
-        if member is None:
-            return
+        member = ctx.message.server.get_member_named(members[0])
 
         if member.id in self.timers_storage[server.id]:
-            await self.bot.say("This member is already muted!")
+            await self.send("This member is already muted!")
             return
 
         # Set permissions
@@ -164,10 +157,17 @@ class Mod:
         db.execute("INSERT INTO mutes(member_id, member_name, mute_time, server_id) VALUES (?,?,strftime('%s','now') + ?,?)", values)
         db.commit()
 
-        if seconds >= 60:
-            await self.send("Member {0} has been muted for {1[0]} minutes and {1[1]} seconds".format(member.name, divmod(seconds, 60)))
-        else:
-            await self.send("Member {} has been muted for {} seconds".format(member.name, seconds))
+        def convert_time_str(secs):
+            return {
+                1 <= secs < 60: '{} second(s)'.format(secs),
+                60 <= secs < 3600: '{0[0]} minute(s) {0[1]} second(s)'.format(divmod(secs, 60)),
+                3600 <= secs < 86400: '{0[0]} hour(s) {0[1]} minute(s)'.format(divmod(secs, 60 * 60)),
+                86400 <= secs < 604800: '{0[0]} day(s) {0[1]} hour(s)'.format(divmod(secs, 60 * 60 * 24)),
+            }[True]
+
+        mute_time = convert_time_str(seconds)
+
+        await self.send("Member {} has been muted for {}".format(member.name, mute_time))
 
     @commands.command(pass_context=True)
     async def mute(self, ctx, user: str):
@@ -186,20 +186,15 @@ class Mod:
         if not bot_permissions.manage_roles:
             await self.send("I'm not able to manage permissions without `Manage Roles` permission.")
             return
+        elif not bot_permissions.mute_members:
+            await self.send("I'm not able to mute voice without `Mute Members` permission.")
 
-        members = utils.get_members(msg, user)
+        members = await utils.get_members(self.bot, ctx.message, user)
 
-        # We want to mute specific member, so limit this to one to avoid wrong member
-        if len(members) > 1:
-            await self.bot.say("There are too many results. Please be more specific.\n\n"
-                               "Here is a list with suggestions:\n"
-                               "{}".format("\n".join(members)))
+        if members is None:
             return
 
-        member = await utils.get_member(self.bot, msg, user, members)
-
-        if member is None:
-            return
+        member = ctx.message.server.get_member_named(members[0])
 
         # If member is temporarily muted - just cancel current timer
         if member.id in self.timers_storage[server.id]:
@@ -232,19 +227,12 @@ class Mod:
             await self.send("I'm not able to manage permissions without `Manage Roles` permission.")
             return
 
-        members = utils.get_members(msg, user)
+        members = await utils.get_members(self.bot, ctx.message, user)
 
-        # We want to mute specific member, so limit this to one to avoid wrong member
-        if len(members) > 1:
-            await self.bot.say("There are too many results. Please be more specific.\n\n"
-                               "Here is a list with suggestions:\n"
-                               "{}".format("\n".join(members)))
+        if members is None:
             return
 
-        member = await utils.get_member(self.bot, msg, user, members)
-
-        if member is None:
-            return
+        member = ctx.message.server.get_member_named(members[0])
 
         # Reset permissions
         await self.set_permissions(server, member, None)
@@ -257,7 +245,7 @@ class Mod:
             db.execute("DELETE FROM mutes WHERE member_id=? AND server_id=?", values)
             db.commit()
 
-        await self.bot.send_message(msg.channel, "Member {} has been unmuted by command.".format(member.name))
+        await self.send("Member {} has been unmuted by command.".format(member.name))
 
 
 def setup(bot):
