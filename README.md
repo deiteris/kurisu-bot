@@ -6,7 +6,7 @@ A discord chat bot which combines different simple features for entertainment pu
 <li>Python 3+</li>
 <li>Latest discord.py library with voice support</li>
 <li>FFMPEG and youtube-dl for music and sounds</li>
-<li><a href="https://pypi.python.org/pypi/wikipedia/" target="_blank">Wikipedia</a> python package and <a href="https://pypi.python.org/pypi/wolframalpha/" target="_blank">WolframAlpha</a>
+<li><a href="https://pypi.python.org/pypi/wikipedia/" target="_blank">Wikipedia</a> and <a href="https://pypi.python.org/pypi/wolframalpha/" target="_blank">WolframAlpha</a> python packages
 </ul>
 
 # Key features
@@ -24,3 +24,18 @@ A discord chat bot which combines different simple features for entertainment pu
 <li>Perform first-time initialization for database using <b>Kurisu, db init</b></li>
 <li>Discover all features and enjoy!</li>
 </ul>
+
+# Defaults
+<ul>
+<li>4 bot prefixes: <b>'Kurisu, ', "kurisu, ", 'k.', 'K.'</b>.</li>
+<li>Owner provided in config has access to all commands.</li>
+<li>Database have several Meme entries and Sound entries according to 'sounds' directory</li>
+<li>Default access roles are 'commander' (level 3) and 'moderator' (level 2)</li>
+</ul>
+
+# Commands access system
+The system is pretty simple: the higher level role has, the more commands its owner can access. This means that if role has level 3, its owner can use service, mod and music commands.
+Most commands in 'service' addon require at least level 3 or greater.
+Commands in 'mod' addon require at least level 2 or greater.
+Some music commands in 'voice' addon require at least level 1 or greater (to prevent abuse).
+There are some commands in 'service' addon, which can be accessed only by owner or level 9000 or greater which can be considered as co-owner.
