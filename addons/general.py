@@ -66,9 +66,9 @@ class General:
         letters = string.ascii_letters
         digits = string.digits
         chars = letters + digits + "!@#$%^&()\/|"
-        i = 0
         password = "Your password: "
 
+        i = 0
         while i < length:
             i += 1
             password += "".join(choice(chars))
@@ -325,7 +325,9 @@ class General:
 
     @wiki.command(name="lang", pass_context=True)
     async def wiki_lang(self, ctx, lang: str):
-        """Sets wiki language. Format: en"""
+        """Sets wiki language.
+        Format: en
+        Default: en"""
         server = ctx.message.server
 
         self.bot.servers_settings.update({server.id: {'wiki_lang': lang}})
