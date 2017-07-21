@@ -56,10 +56,6 @@ class VoiceState:
         self.play_next_song = asyncio.Event()
         self.task = None
         self.volume = 0.2
-        self.ytdl_opts = {
-            'default_search': 'auto',
-            'quiet': True,
-        }
 
     def do_skip(self):
         self.skip_votes.clear()
@@ -88,7 +84,14 @@ class VoiceState:
 
     async def play(self, channel, requester, song):
         try:
-            player = await self.voice_client.create_ytdl_player(song, ytdl_options=self.ytdl_opts)
+            ytdl_meta_opts = {
+                'default_search': 'auto',
+                # Probably should lower memory consumption.
+                # https://github.com/rg3/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L158
+                'simulate': True,
+                'quiet': True,
+            }
+            player = await self.voice_client.create_ytdl_player(song, ytdl_options=ytdl_meta_opts)
         except Exception as e:
             fmt = 'An error occurred while processing this request: ```py\n{}: {}\n```'
             await self.bot.send_message(channel, fmt.format(type(e).__name__, e))
@@ -143,38 +146,47 @@ class VoiceState:
             await self.voice_client.move_to(vc)
 
     async def audio_player_task(self):
-            while True:
-                try:
-                    self.play_next_song.clear()
-                    self.current['request'] = self.queue.popleft()
-                    # NOTE: Workaround for weird youtube-dl (or discord.py) bug.
-                    # If our queue has more than 3-4 entries, there's a possibility,
-                    # that entries after 2nd or 3rd entry will be invalidated and skipped.
-                    # 2x ffmpeg tasks and more memory consumption, but seems to be working stable.
-                    self.current['player'] = await self.voice_client.create_ytdl_player(self.current['request'].song, ytdl_options=self.ytdl_opts, after=self.toggle_next)
-                    self.current['player'].volume = self.volume
+        ytdl_opts = {
+            'default_search': 'auto',
+            'quiet': True,
+        }
+        while True:
+            try:
+                self.play_next_song.clear()
+                self.current['request'] = self.queue.popleft()
 
-                    # We don't need to activate timer if it's a live stream
-                    if not self.current['player'].is_live:
-                        # Create QueueItem.current_position_timer task and put it in QueueItem.task
-                        self.current['request'].task = self.bot.loop.create_task(self.current['request'].current_position_timer())
+                # FIXME: FFMPEG just don't want to go if player was loaded, but wasn't used =\
+                self.current['request'].player.start()
+                self.current['request'].player.stop()
 
-                    self.current['player'].start()
-                    await self.bot.send_message(self.current['request'].channel, 'Now playing ' + str(self.current['request']))
+                # NOTE: Workaround for weird youtube-dl (or discord.py) bug.
+                # If our queue has more than 3-4 entries, there's a possibility,
+                # that entries after 2nd or 3rd entry will be invalidated and skipped.
+                # 2x ffmpeg tasks and more memory consumption, but seems to be working stable.
+                self.current['player'] = await self.voice_client.create_ytdl_player(self.current['request'].song, ytdl_options=ytdl_opts, after=self.toggle_next)
+                self.current['player'].volume = self.volume
 
-                    await self.play_next_song.wait()
+                # We don't need to activate timer if it's a live stream
+                if not self.current['player'].is_live:
+                    # Create QueueItem.current_position_timer task and put it in QueueItem.task
+                    self.current['request'].task = self.bot.loop.create_task(self.current['request'].current_position_timer())
 
-                    if not self.queue:
-                        await self.bot.send_message(self.current['request'].channel, "Queue is empty! Disconnecting...")
-                        self.voice_module.remove_voice_state(self.current['request'].channel.server)
-                        await self.disconnect()
-                        break
+                self.current['player'].start()
+                await self.bot.send_message(self.current['request'].channel, 'Now playing ' + str(self.current['request']))
 
-                except asyncio.CancelledError:
+                await self.play_next_song.wait()
+
+                if not self.queue:
+                    await self.bot.send_message(self.current['request'].channel, "Queue is empty! Disconnecting...")
                     self.voice_module.remove_voice_state(self.current['request'].channel.server)
                     await self.disconnect()
-                    await self.bot.send_message(self.current['request'].channel, "Player stopped.")
                     break
+
+            except asyncio.CancelledError:
+                self.voice_module.remove_voice_state(self.current['request'].channel.server)
+                await self.disconnect()
+                await self.bot.send_message(self.current['request'].channel, "Player stopped.")
+                break
 
 
 class Voice:
