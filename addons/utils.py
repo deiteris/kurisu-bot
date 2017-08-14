@@ -24,7 +24,7 @@ async def db_check(bot, msg, cursor, table: str):
         return False
 
 
-async def get_members(bot, msg, name):
+async def get_members(bot, msg, name: str):
     """
     This function is coroutine.
     

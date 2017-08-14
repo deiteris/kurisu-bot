@@ -6,7 +6,7 @@ A discord chat bot which combines different simple features for entertainment pu
 <li>Python 3+</li>
 <li>Latest discord.py library with voice support</li>
 <li>FFMPEG and youtube-dl for music and sounds</li>
-<li><a href="https://pypi.python.org/pypi/wikipedia/" target="_blank">Wikipedia</a> and <a href="https://pypi.python.org/pypi/wolframalpha/" target="_blank">WolframAlpha</a> python packages
+<li><a href="https://pypi.python.org/pypi/wikipedia/" target="_blank">Wikipedia</a>, <a href="https://pypi.python.org/pypi/wolframalpha/" target="_blank">WolframAlpha</a> and <a href="https://pypi.python.org/pypi/psutil/" target="_blank">psutil</a> python packages
 </ul>
 
 # Key features
@@ -14,7 +14,7 @@ A discord chat bot which combines different simple features for entertainment pu
 <li>(Almost) flexible access system for commands using roles</li>
 <li>Simple, yet, effective mute management (timed and permanent mute)</li>
 <li>Music player based on discord.py and youtube-dl capabilities</li>
-<li>Switch between bot and user account without any hussle. All bot functions compatible with user account features.</li>
+<li>Switch between bot and user account without any hussle. All bot functions are compatible with user account features.</li>
 </ul>
 
 # How to use

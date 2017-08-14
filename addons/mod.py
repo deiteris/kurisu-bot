@@ -100,17 +100,20 @@ class Mod:
             await self.set_permissions(server, member, None)
 
             # Remove muted member from storage
-            del self.timers_storage[server.id][member.id]
-
-            db = self.bot.db
-            values = (member.id, server.id)
-            db.execute("DELETE FROM mutes WHERE member_id=? AND server_id=?", values)
-            db.commit()
+            self.remove_muted_member(member, server)
 
             print("Member {} has been unmuted.".format(member.name))
 
         except asyncio.CancelledError:
-            del self.timers_storage[server.id][member.id]
+            self.remove_muted_member(member, server)
+
+    def remove_muted_member(self, member, server):
+        db = self.bot.db
+        values = (member.id, server.id)
+        db.execute("DELETE FROM mutes WHERE member_id=? AND server_id=?", values)
+        db.commit()
+
+        del self.timers_storage[server.id][member.id]
 
     # Commands
     @commands.command(pass_context=True, name="mute-t")
@@ -123,7 +126,7 @@ class Mod:
         if not await self.checks.check_perms(msg, 2):
             return
 
-        # Check for permission before proceed
+        # Check for permissions before proceed
         bot = server.get_member(self.bot.user.id)
         bot_permissions = bot.server_permissions
 
@@ -157,7 +160,7 @@ class Mod:
         db.execute("INSERT INTO mutes(member_id, member_name, mute_time, server_id) VALUES (?,?,strftime('%s','now') + ?,?)", values)
         db.commit()
 
-        def convert_time_str(secs):
+        def convert_time(secs):
             return {
                 1 <= secs < 60: '{} second(s)'.format(secs),
                 60 <= secs < 3600: '{0[0]} minute(s) {0[1]} second(s)'.format(divmod(secs, 60)),
@@ -165,7 +168,7 @@ class Mod:
                 86400 <= secs < 604800: '{0[0]} day(s) {0[1]} hour(s)'.format(divmod(secs, 60 * 60 * 24)),
             }[True]
 
-        mute_time = convert_time_str(seconds)
+        mute_time = convert_time(seconds)
 
         await self.send("Member {} has been muted for {}".format(member.name, mute_time))
 
@@ -199,10 +202,6 @@ class Mod:
         # If member is temporarily muted - just cancel current timer
         if member.id in self.timers_storage[server.id]:
             self.timers_storage[server.id][member.id].cancel()
-            db = self.bot.db
-            values = (member.id, server.id)
-            db.execute("DELETE FROM mutes WHERE member_id=? AND server_id=?", values)
-            db.commit()
         else:
             # Set permissions
             await self.set_permissions(server, member, False)
@@ -240,10 +239,6 @@ class Mod:
         # Remove mute task for a member and remove him from database
         if member.id in self.timers_storage[server.id]:
             self.timers_storage[server.id][member.id].cancel()
-            db = self.bot.db
-            values = (member.id, server.id)
-            db.execute("DELETE FROM mutes WHERE member_id=? AND server_id=?", values)
-            db.commit()
 
         await self.send("Member {} has been unmuted by command.".format(member.name))
 

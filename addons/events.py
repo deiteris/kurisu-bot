@@ -1,4 +1,5 @@
 import discord
+from datetime import datetime
 from random import randint
 from discord.ext import commands
 
@@ -26,20 +27,22 @@ class Events:
         self.bot.access_roles.update({server.id: {}})
         self.bot.unmute_timers.update({server.id: {}})
         self.bot.servers_settings.update({server.id: {'wiki_lang': "en"}})
-
-    # async def on_member_update(before, after):
-    #    if str(after.status) == "online" and str(after.bot) != "True" and str(before.status) == "offline":
-    #        time_of_day = get_time_of_day(datetime.today().hour)
-    #        opt_list = [time_of_day, "Welcome back", "Hello"]
-    #        i = randrange(0, len(opt_list))
-    #        await bot.send_message(before.server.default_channel, "{}, {}-san!".format(opt_list[i], str.capitalize(before.name)))
+        for member in server.members:
+            if member.id not in self.bot.member_last_seen:
+                if member.status is not discord.Status.offline:
+                    self.bot.member_last_seen.update({member.id: member.status})
+                else:
+                    self.bot.member_last_seen.update({member.id: datetime.today().strftime('%d %B %Y at %H:%M UTC+3')})
 
     async def on_member_join(self, member):
+
+        if member.id not in self.bot.member_last_seen:
+            self.bot.member_last_seen.update({member.id: member.status})
+
         steins_gate = "213420119034953729"
 
         if member.server.id == steins_gate:
             RCgamer77 = "RCgamer77#0099"
-            # Me = "Emojikage#3095"
             embeded = discord.Embed(title="A new member has come to Steins;Gate church!", description='Member Info',
                                     color=0xEE8700)
             embeded.set_thumbnail(url=member.avatar_url)
@@ -48,17 +51,14 @@ class Events:
             embeded.add_field(name="Created account:", value=member.created_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
             embeded.set_image(url="https://i.imgur.com/Wj57Pe2.jpg")
             await self.bot.send_message(member.server.get_member_named(RCgamer77), embed=embeded)
-            # await self.bot.send_message(member.server.get_member_named(Me), embed=embeded)
 
-    # if str(member.bot) != "True":
-    #        embeded = discord.Embed(title='New Labomem!', description='Labomem {} has joined our laboratory.'.format(str.capitalize(member.name)))
-    #        embeded.set_image(url='http://i.imgur.com/HYBdoFe.png')
-    #        await bot.send_message(member.server.default_channel, embed=embeded)
-
-
-    # async def on_member_remove(member):
-    #    if str(member.bot) != "True":
-    #        await bot.send_message(member.server.default_channel, "Labomem {} has left our laboratory.".format(str.capitalize(member.name)))
+    async def on_member_update(self, before, after):
+        if after.status is discord.Status.offline:
+            print("User went offline")
+            self.bot.member_last_seen.update({after.id: datetime.today().strftime('%d %B %Y at %H:%M UTC+3')})
+        else:
+            print("User went online")
+            self.bot.member_last_seen.update({after.id: after.status})
 
     async def on_message(self, msg):
 

@@ -48,6 +48,8 @@ bot.access_roles = {}
 bot.unmute_timers = {}
 # Per server settings
 bot.servers_settings = {}
+# Members storage
+bot.member_last_seen = {}
 
 
 # Doesn't change since bot is already running. No reason to put it in "events".
@@ -69,6 +71,13 @@ async def on_ready():
         bot.unmute_timers.update({server.id: {}})
         # Add server and default settings to servers_settings storage
         bot.servers_settings.update({server.id: {'wiki_lang': 'en'}})
+
+        for member in server.members:
+            if member.id not in bot.member_last_seen:
+                if member.status is not discord.Status.offline:
+                    bot.member_last_seen.update({member.id: member.status})
+                else:
+                    bot.member_last_seen.update({member.id: "No data yet"})
 
         # Preload roles in storage
         cursor.execute("SELECT * FROM roles WHERE serverid={}".format(server.id))

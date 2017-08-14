@@ -5,6 +5,7 @@ import wolframalpha
 import discord
 import string
 import hashlib
+from psutil import virtual_memory
 from addons import utils
 from datetime import datetime
 from discord.ext import commands
@@ -34,6 +35,27 @@ class General:
         div = "{}.{}".format(date.month % 4, str(calc)[6:12])
 
         msg = "Current divergence is: {}".format(div)
+        await self.send(msg)
+
+    @commands.command()
+    async def mem(self):
+        """Shows server memory usage"""
+        ram = virtual_memory()
+
+        def convert_size(size, precision=2):
+            suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
+            suffix_index = 0
+            while size > 1024 and suffix_index < 4:
+                suffix_index += 1  # Increment the index of the suffix
+                size = size / 1024.0  # Apply the division
+            return "%.*f%s" % (precision, size, suffixes[suffix_index])
+
+        msg = "```\nRAM\n---------\nTotal: {}\nUsed: {} ({}%)\nFree: {}\nAvailable: {}\n```".format(convert_size(ram.total),
+                                                                                              convert_size(ram.used),
+                                                                                              ram.percent,
+                                                                                              convert_size(ram.free),
+                                                                                              convert_size(ram.available))
+
         await self.send(msg)
 
     @commands.command()
@@ -206,7 +228,7 @@ class General:
 
         embeded = discord.Embed(title=server.name, description='Server Info', color=0xEE8700)
         embeded.set_thumbnail(url=server.icon_url)
-        embeded.add_field(name="Created on:", value=server.created_at.strftime('%d %B %Y at %H:%M UTC'), inline=False)
+        embeded.add_field(name="Created on:", value=server.created_at.strftime('%d %B %Y at %H:%M UTC+3'), inline=False)
         embeded.add_field(name="Server ID:", value=server.id, inline=False)
         embeded.add_field(name="Users on server:", value=server.member_count, inline=True)
         embeded.add_field(name="Server owner:", value=server.owner, inline=True)
@@ -252,14 +274,18 @@ class General:
         created_case = "days" if created_time_ago.days > 1 else "day"
         joined_case = "days" if joined_time_ago.days > 1 else "day"
 
-        created_at = "{} ({} {} ago)".format(member.created_at.strftime('%d %B %Y at %H:%M UTC'), created_time_ago.days, created_case)
-        joined_at = "{} ({} {} ago)".format(member.joined_at.strftime('%d %B %Y at %H:%M UTC'), joined_time_ago.days, joined_case)
+        created_at = "{} ({} {} ago)".format(member.created_at.strftime('%d %B %Y at %H:%M UTC+3'), created_time_ago.days, created_case)
+        joined_at = "{} ({} {} ago)".format(member.joined_at.strftime('%d %B %Y at %H:%M UTC+3'), joined_time_ago.days, joined_case)
 
         embeded = discord.Embed(title=member.name + "#" + member.discriminator, description='Member Info', color=0xEE8700)
         embeded.set_thumbnail(url=member.avatar_url)
         embeded.add_field(name="Nickname:", value=member.nick, inline=True)
         embeded.add_field(name="ID:", value=member.id, inline=True)
         embeded.add_field(name="Shared servers:", value=server_counter, inline=False)
+        if type(self.bot.member_last_seen[member.id]) is discord.Status:
+            embeded.add_field(name="Current status:", value=self.bot.member_last_seen[member.id], inline=False)
+        else:
+            embeded.add_field(name="Last seen:", value=self.bot.member_last_seen[member.id], inline=False)
         embeded.add_field(name="Created account:", value=created_at, inline=False)
         embeded.add_field(name="Joined server:", value=joined_at, inline=False)
 

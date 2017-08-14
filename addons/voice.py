@@ -14,6 +14,7 @@ if not discord.opus.is_loaded():
     # note that on windows this DLL is automatically provided for you
     discord.opus.load_opus('/usr/lib/libopus.so')
 
+
 class Song:
 
     def __init__(self, title, requester, url, uploader, is_live, duration):
