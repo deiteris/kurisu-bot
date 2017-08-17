@@ -80,7 +80,7 @@ class Mod:
         try:
             await self.bot.server_voice_state(member, mute=False if access is None else True)
         except discord.Forbidden as e:
-            print("Failed to mute user. Reason: {}".format(e))
+            print("Failed to mute user. Reason: {}".format(type(e).__name__))
 
         print("Setting permissions for {} to: {}".format(member.name, str(access)))
 
@@ -90,7 +90,7 @@ class Mod:
                 try:
                     await self.bot.edit_channel_permissions(channel, member, overwrites_text)
                 except discord.Forbidden as e:
-                    print("Failed to change permissions in {} channel. Reason: {}".format(channel, e))
+                    print("Failed to change permissions in {} channel. Reason: {}".format(channel, type(e).__name__))
 
     async def unmute_timer(self, server, member, seconds: int):
         try:

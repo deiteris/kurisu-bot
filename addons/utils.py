@@ -63,11 +63,16 @@ async def get_members(bot, msg, name: str):
                     # Since there can be only one specific member with this discriminator
                     # we can return members right after we found him
                     return members
+            # If we didn't find any members with this discriminator then there's no point to continue.
+            if not members:
+                print("No members with this discriminator were found...")
+                await bot.send_message(msg.channel, "No members were found and I don't have any clue who that is.")
+                return None
 
         # Search for a member by username
         for mem in msg.server.members:
             # Limit number of results
-            if name.lower() in mem.name.lower() and len(members) < 5:
+            if name.lower() in mem.name.lower() and len(members) < 6:
                 members.append(mem.name + '#' + mem.discriminator)
 
         # Search for a member by nickname
@@ -76,10 +81,10 @@ async def get_members(bot, msg, name: str):
             print("Members weren't found. Checking if it's a nickname...")
             for mem in msg.server.members:
                 # Limit number of results & check if member has a nick and compare with input
-                if mem.nick and name.lower() in mem.nick.lower() and len(members) < 5:
+                if mem.nick and name.lower() in mem.nick.lower() and len(members) < 6:
                     members.append(mem.name + '#' + mem.discriminator)
 
-        # If no members this time, then return None and error message else - return members
+        # If no members this time, then return None and error message, else - return members
         if not members:
             print("No members were found")
             await bot.send_message(msg.channel, "No members were found and I don't have any clue who that is.")

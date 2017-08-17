@@ -39,6 +39,7 @@ bot.db = sqlite3.connect('main.db')
 # Create tables for muted members and access roles. Necessary for basic functionality.
 bot.db.execute('CREATE TABLE IF NOT EXISTS mutes (id integer NOT NULL primary key AUTOINCREMENT, member_id varchar, member_name varchar, mute_time integer, server_id varchar)')
 bot.db.execute('CREATE TABLE IF NOT EXISTS roles (id integer NOT NULL primary key AUTOINCREMENT, role varchar, level int, serverid varchar)')
+bot.db.execute('CREATE TABLE IF NOT EXISTS poker_players (id integer NOT NULL primary key AUTOINCREMENT, user_id varchar, name varchar, balance int, win_count int, next_claim_time integer)')
 bot.db.commit()
 
 # Global storages
@@ -48,7 +49,7 @@ bot.access_roles = {}
 bot.unmute_timers = {}
 # Per server settings
 bot.servers_settings = {}
-# Members storage
+# Last seen members storage
 bot.member_last_seen = {}
 
 

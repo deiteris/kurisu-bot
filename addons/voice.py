@@ -181,7 +181,6 @@ class VoiceState:
                 # NOTE: Workaround for weird youtube-dl (or discord.py) bug.
                 # If our queue has more than 3-4 entries, there's a possibility,
                 # that entries after 2nd or 3rd entry will be invalidated and skipped.
-                # 2x ffmpeg tasks and more memory consumption, but seems to be working stable.
                 self.current.player = await self.voice_client.create_ytdl_player(self.current.song.url, ytdl_options=ytdl_opts, after=self.toggle_next)
                 self.current.player.volume = self.volume
 
@@ -241,6 +240,8 @@ class Voice:
         for state in self.voice_states.values():
             state.stop()
             self.bot.loop.create_task(state.disconnect())
+            # Force delete state in case of emergency
+            del state
 
     async def check_capabilities(self, msg, vc):
 

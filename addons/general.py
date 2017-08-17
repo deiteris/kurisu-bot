@@ -72,8 +72,10 @@ class General:
 
         if pins:
             i = randrange(0, len(pins))
+
             if not pins[i].attachments:
                 pins[i].attachments = [{'url': ""}]
+
             if pins[i].author.nick:
                 author = "{} ({})".format(pins[i].author, pins[i].author.nick)
             else:
@@ -291,7 +293,7 @@ class General:
 
         # TODO: probably this can be shortened
         if not roles:
-            embeded.add_field(name="Roles: ({})".format(len(roles)), value="None", inline=False)
+            embeded.add_field(name="Roles: (0)", value="None", inline=False)
         else:
             embeded.add_field(name="Roles: ({})".format(len(roles)), value=", ".join(roles), inline=False)
 

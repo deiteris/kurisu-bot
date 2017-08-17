@@ -29,7 +29,7 @@ A discord chat bot which combines different simple features for entertainment pu
 <ul>
 <li>4 bot prefixes: <b>'Kurisu, ', "kurisu, ", 'k.', 'K.'</b>.</li>
 <li>Owner provided in config has access to all commands.</li>
-<li>Database have several Meme entries and Sound entries according to 'sounds' directory</li>
+<li>Database has several Meme entries and Sound entries according to 'sounds' directory</li>
 <li>Default access roles are 'commander' (level 3) and 'moderator' (level 2)</li>
 </ul>
 

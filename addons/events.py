@@ -54,10 +54,8 @@ class Events:
 
     async def on_member_update(self, before, after):
         if after.status is discord.Status.offline:
-            print("User went offline")
             self.bot.member_last_seen.update({after.id: datetime.today().strftime('%d %B %Y at %H:%M UTC+3')})
         else:
-            print("User went online")
             self.bot.member_last_seen.update({after.id: after.status})
 
     async def on_message(self, msg):
