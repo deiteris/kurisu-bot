@@ -2,6 +2,7 @@
 # TODO: Proper prize distribution and banks
 # TODO: Clean up, refactor and sort the code
 # TODO: Describe all commands and add more info upon completion
+# FEATURE: Hand evaluation assist?
 # FEATURE: Money transfer?
 # FEATURE: Game initiator, on ready start, or stay as is?
 
@@ -23,6 +24,10 @@ class GameStatus(Enum):
     FLOP = auto()
     TURN = auto()
     RIVER = auto()
+    ENDGAME = auto()
+
+    def next(self):
+        return GameStatus(self.value + 1)
 
 
 class PlayerStatus(Enum):
@@ -61,7 +66,8 @@ class Player:
         self.user = user
         self.status = status
         self.hand = deque()
-        self.current_stake = 20
+        self.current_stake = 0
+        self.total_stake = 0
         self.balance = balance
 
     def add_balance(self, amount):
@@ -74,6 +80,7 @@ class Player:
         self.status = status
 
     def set_current_stake(self, stake):
+        self.total_stake += stake
         self.current_stake = stake
 
     def __str__(self):
@@ -82,21 +89,20 @@ class Player:
 
 class Table:
 
-    def __init__(self):
-        self.players = None
-        self.dealer = None
+    def __init__(self, players):
+        self.players = players
+        self.dealer = Dealer(self.players, self)
         self.cards = []
         # TODO: Probably separate banks for different rounds are needed
         self.bank = 0
+
+        self.dealer.distribute_cards()
 
     def add_bank(self, amount):
         self.bank += amount
 
     def set_players(self, players):
         self.players = players
-
-    def set_dealer(self):
-        self.dealer = Dealer(self.players, self)
 
     def get_dealer(self):
         return self.dealer
@@ -110,9 +116,8 @@ class GameDirector:
         self.bot = bot
         self.db_funcs = db_funcs
         self.table = None
-        self.current_player = None
         self.turn_timer = None
-        self.players = deque()
+        self.players = []
         self.rotation = deque()
         self.highest_stake = 40
         self.turn_counter = 0
@@ -120,7 +125,7 @@ class GameDirector:
 
     # Game functions
     def create_table(self):
-        self.table = Table()
+        self.table = Table(self.players)
 
     def process_stake(self, player, amount, stake, status):
 
@@ -133,15 +138,17 @@ class GameDirector:
 
         player.set_status(status)
 
-        # Cancel turn timer
-        self.turn_timer.cancel()
-
     async def make_check(self, player):
 
         player.set_status(PlayerStatus.CHECKED)
 
-        # Don't forget about check
-        self.turn_timer.cancel()
+        await self.get_next_player()
+
+    async def make_fold(self, player):
+
+        player.set_status(PlayerStatus.FOLDED)
+
+        self.rotation.remove(player)
 
         await self.get_next_player()
 
@@ -164,7 +171,7 @@ class GameDirector:
     async def make_bet(self, player, amount):
 
         if player.balance < amount or self.highest_stake != 0:
-            await self.bot.send_message(self.channel, "You don't have enough money to make bet or use \"/raise\" to increase stake.")
+            await self.bot.send_message(self.channel, "You don't have enough money to make bet or use \"k.raise\" to increase stake.")
             return
 
         self.highest_stake = amount
@@ -212,29 +219,23 @@ class GameDirector:
 
         await self.get_next_player()
 
-    async def make_fold(self, player):
+    def take_blind(self, player):
+        player.withdraw_balance(20)
+        player.set_current_stake(20)
+        self.table.add_bank(20)
 
-        player.set_status(PlayerStatus.FOLDED)
-        self.rotation.remove(player)
-
-        await self.get_next_player()
-
-    def take_blind(self):
-        for player in self.players:
-            player.withdraw_balance(20)
-            player.set_current_stake(20)
-            self.table.add_bank(20)
-
-            self.db_funcs.write_player_data(player)
-
-    def get_table_bank(self):
-        return self.table.bank
+        self.db_funcs.write_player_data(player)
 
     def set_players(self):
+        # TODO: Make rotation order according to rules
+        # Check if player has balance equal to 0 at game start and remove him
+        for player in self.players:
+            if player.balance < 100:
+                self.players.remove(player)
+            else:
+                self.take_blind(player)
         # Copy players array to rotation
         self.rotation = deque(self.players)
-        # TODO: Make rotation order according to rules
-        self.table.set_players(self.rotation)
 
     def add_player(self, player):
 
@@ -258,10 +259,8 @@ class GameDirector:
             # player.set_status(PlayerStatus.FOLDED)
             self.rotation.remove(player)
             # If rotation doesn't contain players - the table will be destroyed
-            if player is self.current_player and len(self.rotation) >= 1:
+            if player.status is PlayerStatus.THONKING and len(self.rotation) >= 1:
                 await self.get_next_player()
-                # Gets dereferenced
-                # self.table.players.remove(player)
 
     def set_status(self, status):
         self.status = status
@@ -269,7 +268,7 @@ class GameDirector:
     async def turn_timer_task(self, player):
         try:
             # 20 seconds of inactivity
-            while self.turn_counter < 20:
+            while self.turn_counter < 90:
                 self.turn_counter += 1
                 await asyncio.sleep(1)
             else:
@@ -282,17 +281,23 @@ class GameDirector:
             # And after task cancelling too
             self.turn_counter = 0
 
+    async def get_table_info(self):
+
+        embeded = discord.Embed(title='Table Info', description="Channel: {}".format(self.channel.name), color=0xEE8700)
+        embeded.add_field(name="Total players:", value=str(len(self.players)), inline=True)
+        embeded.add_field(name="Game status:", value=self.status.name, inline=False)
+        if self.table is not None:
+            embeded.add_field(name="Table bank:", value="${}".format(self.table.bank), inline=False)
+        for player in self.players:
+            embeded.add_field(name=str(player.user), value="Balance: ${}\nStatus: {}".format(player.balance, player.status.name), inline=True)
+
+        await self.bot.send_message(self.channel, embed=embeded)
+
     async def get_next_player(self):
 
-        if len(self.rotation) == 1:
-            last_player = self.rotation.popleft()
-            for player in self.players:
-                player.hand = []
-            last_player.add_balance(self.get_table_bank())
-            self.set_status(GameStatus.PENDING)
-            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n"
-                                                      "Type \"/start\" to start game again.".format(last_player.user.mention))
-            return
+        # Cancel timer
+        if self.turn_timer is not None:
+            self.turn_timer.cancel()
 
         # Get next round
         await self.get_next_round()
@@ -304,10 +309,6 @@ class GameDirector:
         # Move out player
         player = self.rotation.popleft()
 
-        # If player has any other status than WAITING - pick next one
-        if player.status is not PlayerStatus.WAITING:
-            player = self.rotation.popleft()
-
         # Put him in the end of rotation
         self.rotation.append(player)
 
@@ -317,11 +318,10 @@ class GameDirector:
         # Set player status
         player.set_status(PlayerStatus.THONKING)
 
-        self.current_player = player
-
-        await self.bot.send_message(self.channel, "{}'s turn.\nCurrent table bank is: {}$".format(self.current_player.user.mention, self.table.bank))
+        await self.bot.send_message(self.channel, "{}'s turn.\nCurrent table bank is: ${}".format(player.user.mention, self.table.bank))
 
     async def set_next_round(self, status):
+
         for player in self.rotation:
             # Reset states and nullify current stakes
             player.set_status(PlayerStatus.WAITING)
@@ -335,7 +335,44 @@ class GameDirector:
 
         await self.bot.send_message(self.channel, "Cards on table:\n{}".format("\n".join(cards)))
 
+    def reset_game(self):
+        # Reset stakes and hands
+        for player in self.players:
+            player.hand = []
+            player.set_current_stake(0)
+            player.total_stake = 0
+            player.set_status(PlayerStatus.WAITING)
+
+        # Reset rotation
+        self.rotation = deque()
+
+        # Nullify timer task
+        self.turn_timer = None
+
+        # Reset initial highest stake
+        self.highest_stake = 40
+
+        # Burn the table
+        self.table = None
+
     async def get_next_round(self):
+
+        if len(self.rotation) == 1:
+            last_player = self.rotation.popleft()
+            last_player.add_balance(self.table.bank)
+
+            self.db_funcs.write_player_data(last_player)
+
+            # Reset status
+            self.set_status(GameStatus.PENDING)
+
+            # Reset game
+            self.reset_game()
+
+            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n"
+                                                      "Type \"k.start\" to start game again.".format(last_player.user.mention))
+            return
+
         is_new_round = True
 
         for player in self.rotation:
@@ -349,13 +386,13 @@ class GameDirector:
 
         if is_new_round:
 
-            if self.status is GameStatus.PREFLOP:
-                await self.set_next_round(GameStatus.FLOP)
-            elif self.status is GameStatus.FLOP:
-                await self.set_next_round(GameStatus.TURN)
-            elif self.status is GameStatus.TURN:
-                await self.set_next_round(GameStatus.RIVER)
-            elif self.status is GameStatus.RIVER:
+            # Get next status
+            next_status = self.status.next()
+
+            # Set it if it's not end of the game
+            if next_status is not GameStatus.ENDGAME:
+                await self.set_next_round(next_status)
+            else:
                 # Update game status
                 self.set_status(GameStatus.PENDING)
 
@@ -383,34 +420,27 @@ class GameDirector:
                         winners = [player]
                         best_rank = rank
 
-                    # Reset player hand
-                    player.hand = []
-
                 rank_class = self.evaluator.get_rank_class(best_rank)
                 class_string = self.evaluator.class_to_string(rank_class)
 
                 if len(winners) == 1:
-                    msg = "The winner is {} with {}.\n{}\nEnd of game. Type \"/start\" to start game again.".format(
+                    msg = "The winner is {} with {}.\n{}\nEnd of game. Type \"k.start\" to start game again.".format(
                         winners[0].user.mention, class_string, players_cards
                     )
                     # Give bank to winner
                     winners[0].add_balance(self.table.bank)
                     self.db_funcs.write_player_data(winners[0])
                 else:
-                    msg = "Players {} are tied for the win with {}.\n{}\nEnd of game. Type \"/start\" to start game again.".format(
+                    msg = "Players {} are tied for the win with {}.\n{}\nEnd of game. Type \"k.start\" to start game again.".format(
                         ", ".join(map(str, winners)), class_string, players_cards
                     )
-                    # Distribute bank among the winners
-                    distribute_amount = self.table.bank // len(winners)
+                    # Return players' stakes
                     for winner in winners:
-                        winner.add_balance(distribute_amount)
+                        winner.add_balance(winner.total_stake)
                         self.db_funcs.write_player_data(winner)
 
-                # Reset rotation
-                self.rotation = deque()
-
-                # Reset initial highest stake
-                self.highest_stake = 40
+                # Reset game
+                self.reset_game()
 
                 await self.bot.send_message(self.channel, msg)
 
@@ -543,7 +573,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if game:
-            await self.bot.say("There's an ongoing game! Type \"/join\" to join the table!")
+            await self.bot.say("There's an ongoing game! Type \"k.join\" to join the table!")
             return
 
         player_balance = self.db_funcs.load_player_data(author)[3]
@@ -566,7 +596,7 @@ class Poker:
         print("Players initiated!")
         print("Total players: {}".format(self.games[server.id][channel.id].players))
 
-        await self.bot.say("{} has initiated new game! ┬─┬﻿ ノ( ゜-゜ノ)\nType \"/join\" to join table!".format(author.name))
+        await self.bot.say("{} has initiated new game! ┬─┬﻿ ノ( ゜-゜ノ)\nType \"k.join\" to join table!".format(author.name))
 
     @commands.command(pass_context=True, no_pm=True)
     async def join(self, ctx):
@@ -579,7 +609,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         # TODO: Check if player has at least minimum amount of money
@@ -620,7 +650,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         player = game.get_player(author)
@@ -666,15 +696,14 @@ class Poker:
 
         await self.bot.say("You have successfully claimed daily money!")
 
-
-    @commands.command(pass_context=True, no_pm=False)
+    @commands.command(pass_context=True, no_pm=False, aliases=['bal'])
     async def balance(self, ctx):
         """Shows balance"""
 
         author = ctx.message.author
 
         player_balance = self.db_funcs.load_player_data(author)[3]
-        await self.bot.say("Your balance is {}$".format(player_balance))
+        await self.bot.say("Your balance is ${}".format(player_balance))
 
     @commands.command(pass_context=True, no_pm=True)
     async def start(self, ctx):
@@ -686,7 +715,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
         elif game.status is not GameStatus.PENDING:
             await self.bot.say("The game is in process.")
@@ -698,9 +727,6 @@ class Poker:
         game.create_table()
         game.set_status(GameStatus.PREFLOP)
         game.set_players()
-        game.table.set_dealer()
-        game.take_blind()
-        game.table.get_dealer().distribute_cards()
 
         for player in game.players:
             cards = [deuces.Card.int_to_pretty_str(card) for card in player.hand]
@@ -721,7 +747,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         player = game.get_player(author)
@@ -732,7 +758,7 @@ class Poker:
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
             return
-        elif player.status is PlayerStatus.WAITING or player.status is PlayerStatus.FOLDED:
+        elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
             return
         elif game.status is GameStatus.PREFLOP:
@@ -740,6 +766,20 @@ class Poker:
             return
 
         await game.make_check(player)
+
+    @commands.command(pass_context=True, no_pm=True, name='table-info')
+    async def table_info(self, ctx):
+
+        server = ctx.message.server
+        channel = ctx.message.channel
+
+        game = self.get_game(server, channel)
+
+        if not game:
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
+            return
+
+        await game.get_table_info()
 
     @commands.command(pass_context=True, no_pm=True)
     async def call(self, ctx):
@@ -751,7 +791,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         player = game.get_player(author)
@@ -762,9 +802,11 @@ class Poker:
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
             return
-        elif player.status is PlayerStatus.WAITING or player.status is PlayerStatus.FOLDED:
+        elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
             return
+
+        print(player.status)
 
         await game.make_call(player)
 
@@ -778,7 +820,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         player = game.get_player(author)
@@ -789,7 +831,7 @@ class Poker:
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
             return
-        elif player.status is PlayerStatus.WAITING or player.status is PlayerStatus.FOLDED:
+        elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
             return
         elif game.status is GameStatus.PREFLOP:
@@ -808,7 +850,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         player = game.get_player(author)
@@ -819,7 +861,7 @@ class Poker:
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
             return
-        elif player.status is PlayerStatus.WAITING or player.status is PlayerStatus.FOLDED:
+        elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
             return
 
@@ -835,7 +877,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         player = game.get_player(author)
@@ -846,7 +888,7 @@ class Poker:
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
             return
-        elif player.status is PlayerStatus.WAITING or player.status is PlayerStatus.FOLDED:
+        elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
             return
 
@@ -862,7 +904,7 @@ class Poker:
         game = self.get_game(server, channel)
 
         if not game:
-            await self.bot.say("There're no ongoing games. Start new by typing \"/poker\"!")
+            await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
         player = game.get_player(author)
@@ -873,7 +915,7 @@ class Poker:
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
             return
-        elif player.status is PlayerStatus.WAITING or player.status is PlayerStatus.FOLDED:
+        elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
             return
 
