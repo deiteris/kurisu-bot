@@ -65,7 +65,7 @@ class Player:
         self.id = player_id
         self.user = user
         self.status = status
-        self.hand = deque()
+        self.hand = []
         self.current_stake = 0
         self.total_stake = 0
         self.balance = balance
@@ -84,7 +84,7 @@ class Player:
         self.current_stake = stake
 
     def __str__(self):
-        return self.user.name
+        return str(self.user)
 
 
 class Table:
@@ -96,6 +96,7 @@ class Table:
         # TODO: Probably separate banks for different rounds are needed
         self.bank = 0
 
+        # Distribute cards right after table was created
         self.dealer.distribute_cards()
 
     def add_bank(self, amount):
@@ -289,7 +290,7 @@ class GameDirector:
         if self.table is not None:
             embeded.add_field(name="Table bank:", value="${}".format(self.table.bank), inline=False)
         for player in self.players:
-            embeded.add_field(name=str(player.user), value="Balance: ${}\nStatus: {}".format(player.balance, player.status.name), inline=True)
+            embeded.add_field(name=player, value="Balance: ${}\nStatus: {}".format(player.balance, player.status.name), inline=True)
 
         await self.bot.send_message(self.channel, embed=embeded)
 
@@ -357,6 +358,7 @@ class GameDirector:
 
     async def get_next_round(self):
 
+        # Before we check for next round we need to make sure it's necessary
         if len(self.rotation) == 1:
             last_player = self.rotation.popleft()
             last_player.add_balance(self.table.bank)
@@ -380,10 +382,12 @@ class GameDirector:
             # Except the case when player went all-in.
             if player.current_stake < self.highest_stake and player.balance != 0:
                 player.set_status(PlayerStatus.WAITING)
+
             # And if we found player who is waiting and has non-zero balance - continue current round.
             if player.status is PlayerStatus.WAITING:
                 is_new_round = False
 
+        # If all players made their moves - proceed to next round
         if is_new_round:
 
             # Get next status
@@ -396,7 +400,7 @@ class GameDirector:
                 # Update game status
                 self.set_status(GameStatus.PENDING)
 
-                # TODO: Prize distribution
+                # TODO: Prize distribution (when banks are finished)
 
                 winners = []
                 players_cards = ""
@@ -462,7 +466,7 @@ class DBFunctions:
     def write_player_data(self, player: Player):
         try:
             # NOTE: Uses Player type, other functions use discord.Member type
-            record = (str(player.user), player.balance, player.user.id)
+            record = (player, player.balance, player.user.id)
             self.db.execute("UPDATE poker_players SET name=?, balance=? WHERE user_id=?", record)
             self.db.commit()
         except sqlite3.Error as e:
@@ -507,7 +511,7 @@ class DBFunctions:
 
             if type(player) is Player:
                 player.balance += money_to_give
-                record = (str(player.user), player.balance, next_day, player.user.id)
+                record = (player, player.balance, next_day, player.user.id)
             elif type(player) is discord.Member:
                 player_balance = self.load_player_data(player)[3]
                 player_balance += money_to_give
@@ -529,11 +533,15 @@ class Poker:
         self.db_funcs = DBFunctions(bot.db)
         self.games = {}
 
-    # Don't allow player to play in multiple games
-    def player_lookup(self, player):
+    def get_game(self, server, channel):
 
-        if len(self.games) == 0:
-            return False
+        if server.id not in self.games or channel.id not in self.games[server.id]:
+            return None
+
+        return self.games[server.id][channel.id]
+
+    # Don't allow player to participate in multiple games
+    def player_lookup(self, player):
 
         for server, channel in self.games.items():
             for game in channel.values():
@@ -542,29 +550,14 @@ class Poker:
 
         return False
 
-    def get_game(self, server, channel):
-
-        if len(self.games) == 0:
-            return None
-
-        if server.id in self.games:
-            print('Found server!')
-            print('Server: {}'.format(server.name))
-        else:
-            return None
-
-        if channel.id in self.games[server.id]:
-            print('Found channel!')
-            print('Channel: {}'.format(channel.name))
-        else:
-            return None
-
-        return self.games[server.id][channel.id]
-
     # General actions
     @commands.command(pass_context=True, no_pm=True)
     async def poker(self, ctx):
-        """Initializes poker game"""
+        """
+        Initializes poker game.
+        For more information about game rules, please, check:
+        http://www.pokerlistings.com/poker-rules-texas-holdem
+        """
 
         author = ctx.message.author
         server = ctx.message.server
@@ -576,31 +569,36 @@ class Poker:
             await self.bot.say("There's an ongoing game! Type \"k.join\" to join the table!")
             return
 
-        player_balance = self.db_funcs.load_player_data(author)[3]
-        lookup_result = self.player_lookup(author)
+        # The only case when we need to check if there a games - when we're creating new game
+        if len(self.games) > 0:
+            lookup_result = self.player_lookup(author)
 
-        if lookup_result:
-            await self.bot.say("You're not allowed to play in more than one game!")
-            return
-        elif player_balance < 100:
+            if lookup_result:
+                await self.bot.say("You're not allowed to play in more than one game!")
+                return
+
+        player_balance = self.db_funcs.load_player_data(author)[3]
+
+        if player_balance < 100:
             await self.bot.say("You don't have enough money to participate in game.")
             return
 
-        self.games.update({server.id: {channel.id: GameDirector(self.bot, self.db_funcs, channel, GameStatus.PENDING)}})
+        game = GameDirector(self.bot, self.db_funcs, channel, GameStatus.PENDING)
+        game.add_player(author)
 
-        print("Game created!")
-        print("Game object: {}".format(self.games[server.id][channel.id]))
+        if server.id not in self.games:
+            self.games.update({server.id: {}})
 
-        self.games[server.id][channel.id].add_player(author)
+        self.games[server.id].update({channel.id: game})
 
-        print("Players initiated!")
-        print("Total players: {}".format(self.games[server.id][channel.id].players))
-
-        await self.bot.say("{} has initiated new game! ┬─┬﻿ ノ( ゜-゜ノ)\nType \"k.join\" to join table!".format(author.name))
+        await self.bot.say("{} has initiated new game! ┬─┬﻿ ノ( ゜-゜ノ)\nType \"k.join\" to join table "
+                           "and type \"k.start\" once everyone is ready!".format(author.name))
 
     @commands.command(pass_context=True, no_pm=True)
     async def join(self, ctx):
-        """Join game"""
+        """
+        Join game.
+        """
 
         author = ctx.message.author
         server = ctx.message.server
@@ -612,20 +610,23 @@ class Poker:
             await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
             return
 
-        # TODO: Check if player has at least minimum amount of money
         player = game.get_player(author)
 
         if player:
-            await self.bot.say("You're playing this game!")
+            await self.bot.say("You're participating in this game!")
             return
 
-        player_balance = self.db_funcs.load_player_data(author)[3]
+        # Since we're checking if there're any games before join
+        # There's no possibility that games will be equal to zero
         lookup_result = self.player_lookup(author)
 
         if lookup_result:
             await self.bot.say("You're not allowed to play in more than one game!")
             return
-        elif player_balance < 100:
+
+        player_balance = self.db_funcs.load_player_data(author)[3]
+
+        if player_balance < 100:
             await self.bot.say("You don't have enough money to participate in game.")
             return
         elif len(game.players) == 10:
@@ -634,14 +635,13 @@ class Poker:
 
         game.add_player(author)
 
-        print("Players updated!")
-        print("Total players: {}".format(self.games[server.id][channel.id].players))
-
         await self.bot.say("{} has joined the game!".format(author.name))
 
     @commands.command(pass_context=True, no_pm=True)
     async def leave(self, ctx):
-        """Leave game"""
+        """
+        Leave game.
+        """
 
         author = ctx.message.author
         server = ctx.message.server
@@ -656,7 +656,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
 
         await game.remove_player(player)
@@ -665,11 +665,15 @@ class Poker:
 
         if not game.players:
             del self.games[server.id][channel.id]
-            await self.bot.say("Table is empty! (╯°-°）╯︵ ┻━┻")
+            await self.bot.say("Table is empty! (╯°-°）╯︵ ┻━┻:fire:")
 
     @commands.command(pass_context=True, no_pm=False)
     async def claim(self, ctx):
-        """Claim daily money"""
+        """
+        Adds money to your balance in amount of $1000.
+        You can claim prize only once in a day.
+        """
+
         author = ctx.message.author
         server = ctx.message.server
         channel = ctx.message.channel
@@ -680,7 +684,7 @@ class Poker:
         cursor.close()
 
         if result:
-            await self.bot.say("You have already claimed your daily money today!")
+            await self.bot.say("You have already claimed your daily prize today!")
             return
 
         game = self.get_game(server, channel)
@@ -694,11 +698,13 @@ class Poker:
             # Update balance only in database (and create record if it doesn't exist)
             self.db_funcs.give_money(author)
 
-        await self.bot.say("You have successfully claimed daily money!")
+        await self.bot.say("You have successfully claimed daily prize!")
 
     @commands.command(pass_context=True, no_pm=False, aliases=['bal'])
     async def balance(self, ctx):
-        """Shows balance"""
+        """
+        Shows balance.
+        """
 
         author = ctx.message.author
 
@@ -707,7 +713,9 @@ class Poker:
 
     @commands.command(pass_context=True, no_pm=True)
     async def start(self, ctx):
-        """Start game"""
+        """
+        Start game.
+        """
 
         server = ctx.message.server
         channel = ctx.message.channel
@@ -739,6 +747,9 @@ class Poker:
     # Game actions
     @commands.command(pass_context=True, no_pm=True)
     async def check(self, ctx):
+        """
+        Pass the action to next player, but keep cards.
+        """
 
         author = ctx.message.author
         server = ctx.message.server
@@ -769,6 +780,9 @@ class Poker:
 
     @commands.command(pass_context=True, no_pm=True, name='table-info')
     async def table_info(self, ctx):
+        """
+        Shows information about current game.
+        """
 
         server = ctx.message.server
         channel = ctx.message.channel
@@ -783,6 +797,9 @@ class Poker:
 
     @commands.command(pass_context=True, no_pm=True)
     async def call(self, ctx):
+        """
+        Match the amount that has been put in by another player.
+        """
 
         author = ctx.message.author
         server = ctx.message.server
@@ -806,12 +823,16 @@ class Poker:
             await self.bot.say("You can't make any actions!")
             return
 
-        print(player.status)
-
         await game.make_call(player)
 
     @commands.command(pass_context=True, no_pm=True)
     async def bet(self, ctx, amount: int):
+        """
+        Open round with stake.
+        """
+
+        if amount < 0:
+            return
 
         author = ctx.message.author
         server = ctx.message.server
@@ -842,6 +863,12 @@ class Poker:
 
     @commands.command(pass_context=True, no_pm=True, name='raise')
     async def raise_stake(self, ctx, amount: int):
+        """
+        Increase the amount of current stake ON given amount.
+        """
+
+        if amount < 0:
+            return
 
         author = ctx.message.author
         server = ctx.message.server
@@ -869,6 +896,9 @@ class Poker:
 
     @commands.command(pass_context=True, no_pm=True, name='all-in')
     async def all_in(self, ctx):
+        """
+        Bet all available money.
+        """
 
         author = ctx.message.author
         server = ctx.message.server
@@ -896,6 +926,9 @@ class Poker:
 
     @commands.command(pass_context=True, no_pm=True)
     async def fold(self, ctx):
+        """
+        Drop cards and pass action to next player.
+        """
 
         author = ctx.message.author
         server = ctx.message.server
