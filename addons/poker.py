@@ -183,9 +183,10 @@ class GameDirector:
 
     async def make_raise(self, player, amount):
 
-        # (Highest Stake - Player Current Stake) + amount
-        # (100 - 20) + 100 = 180 = PROFIT
-        raise_amount = (self.highest_stake - player.current_stake) + amount
+        # Take the highest stake and add amount to it
+        # 200 + 200 = 400 - raise
+        # 0 + 200 = 200 - bet
+        raise_amount = self.highest_stake + amount
 
         if player.balance < raise_amount:
             await self.bot.send_message(self.channel, "You don't have enough money to raise stake.")
@@ -193,9 +194,7 @@ class GameDirector:
 
         self.highest_stake = raise_amount
 
-        amount_difference = raise_amount - player.current_stake
-
-        self.process_stake(player, amount_difference, raise_amount, PlayerStatus.RAISED)
+        self.process_stake(player, raise_amount, raise_amount, PlayerStatus.RAISED)
 
         await self.get_next_player()
 
@@ -215,6 +214,8 @@ class GameDirector:
             amount_difference = player.balance - player.current_stake
         else:
             amount_difference = player.current_stake - player.balance
+
+        print("Amount difference: {}".format(amount_difference))
 
         self.process_stake(player, amount_difference, player_stake, PlayerStatus.ALLIN)
 
@@ -389,6 +390,8 @@ class GameDirector:
 
         # If all players made their moves - proceed to next round
         if is_new_round:
+
+            print("Setting new round!")
 
             # Get next status
             next_status = self.status.next()
