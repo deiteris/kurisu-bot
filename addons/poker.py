@@ -32,6 +32,8 @@ class GameStatus(Enum):
 
 class PlayerStatus(Enum):
     WAITING = auto()
+    # For debug purposes
+    BLINDED = auto()
     CALLED = auto()
     CHECKED = auto()
     BET = auto()
@@ -80,8 +82,10 @@ class Player:
         self.status = status
 
     def set_current_stake(self, stake):
-        self.total_stake += stake
         self.current_stake = stake
+
+    def set_total_stake(self, stake):
+        self.total_stake += stake
 
     def __str__(self):
         return str(self.user)
@@ -120,7 +124,7 @@ class GameDirector:
         self.turn_timer = None
         self.players = []
         self.rotation = deque()
-        self.highest_stake = 40
+        self.highest_stake = 0
         self.turn_counter = 0
         self.evaluator = deuces.Evaluator()
 
@@ -130,12 +134,21 @@ class GameDirector:
 
     def process_stake(self, player, amount, stake, status):
 
+        print("-------------------------------")
+        print("{} {}".format(str(player), status.name))
+        print("Player balance: ${}".format(player.balance))
+        print("Amount to withdraw and add to bank: ${}".format(amount))
+        print("Player current stake: ${}".format(stake))
+
         player.withdraw_balance(amount)
+        player.set_total_stake(amount)
         self.table.add_bank(amount)
 
         self.db_funcs.write_player_data(player)
 
         player.set_current_stake(stake)
+        print("Player total stake: ${}".format(player.total_stake))
+        print("-------------------------------")
 
         player.set_status(status)
 
@@ -183,9 +196,6 @@ class GameDirector:
 
     async def make_raise(self, player, amount):
 
-        # Take the highest stake and add amount to it
-        # 200 + 200 = 400 - raise
-        # 0 + 200 = 200 - bet
         raise_amount = self.highest_stake + amount
 
         if player.balance < raise_amount:
@@ -194,7 +204,9 @@ class GameDirector:
 
         self.highest_stake = raise_amount
 
-        self.process_stake(player, raise_amount, raise_amount, PlayerStatus.RAISED)
+        amount_difference = raise_amount - player.current_stake
+
+        self.process_stake(player, amount_difference, raise_amount, PlayerStatus.RAISED)
 
         await self.get_next_player()
 
@@ -204,7 +216,11 @@ class GameDirector:
             await self.bot.send_message(self.channel, "You don't have money to go all in.")
             return
 
-        player_stake = player.balance + player.total_stake - player.current_stake
+        if player.current_stake == 0:
+            player_stake = player.balance
+        else:
+            player_stake = player.balance + player.total_stake - player.current_stake
+            print("Player Stake = {} + {} - {}".format(player.balance, player.total_stake, player.current_stake))
 
         if player_stake >= self.highest_stake:
             self.highest_stake = player_stake
@@ -214,9 +230,13 @@ class GameDirector:
         await self.get_next_player()
 
     def take_blind(self, player):
-        player.withdraw_balance(20)
-        player.set_current_stake(20)
-        self.table.add_bank(20)
+
+        SMALL_BLIND = 20
+        BIG_BLING = SMALL_BLIND + 20
+
+        self.highest_stake = BIG_BLING
+
+        self.process_stake(player, SMALL_BLIND, SMALL_BLIND, PlayerStatus.BLINDED)
 
         self.db_funcs.write_player_data(player)
 
@@ -319,7 +339,7 @@ class GameDirector:
         for player in self.rotation:
             # Reset states and nullify current stakes
             player.set_status(PlayerStatus.WAITING)
-            player.set_current_stake(0)
+            player.current_stake = 0
             self.highest_stake = 0
 
         self.set_status(status)
@@ -330,12 +350,15 @@ class GameDirector:
         await self.bot.send_message(self.channel, "Cards on table:\n{}".format("\n".join(cards)))
 
     def reset_game(self):
+        # Reset status
+        self.set_status(GameStatus.PENDING)
+
         # Reset stakes and hands
         for player in self.players:
-            player.hand = []
-            player.set_current_stake(0)
-            player.total_stake = 0
             player.set_status(PlayerStatus.WAITING)
+            player.hand = []
+            player.current_stake = 0
+            player.total_stake = 0
 
         # Reset rotation
         self.rotation = deque()
@@ -344,7 +367,7 @@ class GameDirector:
         self.turn_timer = None
 
         # Reset initial highest stake
-        self.highest_stake = 40
+        self.highest_stake = 0
 
         # Burn the table
         self.table = None
@@ -358,9 +381,6 @@ class GameDirector:
 
             self.db_funcs.write_player_data(last_player)
 
-            # Reset status
-            self.set_status(GameStatus.PENDING)
-
             # Reset game
             self.reset_game()
 
@@ -373,6 +393,7 @@ class GameDirector:
         for player in self.rotation:
             # We need to check if all stakes are equal to the highest one.
             # Except the case when player went all-in.
+            print("{} < {}?".format(player.current_stake, self.highest_stake))
             if player.current_stake < self.highest_stake and player.balance != 0:
                 player.set_status(PlayerStatus.WAITING)
 
@@ -382,8 +403,6 @@ class GameDirector:
 
         # If all players made their moves - proceed to next round
         if is_new_round:
-
-            print("Setting new round!")
 
             # Get next status
             next_status = self.status.next()
