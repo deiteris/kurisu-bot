@@ -253,14 +253,14 @@ class GameDirector:
 
     async def remove_player(self, player):
 
+        # If there are no players - the table will be destroyed
         self.players.remove(player)
 
         # Variables are uninitialized if game is not in process
         if self.status is not GameStatus.PENDING:
-            # player.set_status(PlayerStatus.FOLDED)
             self.rotation.remove(player)
-            # If rotation doesn't contain players - the table will be destroyed
-            if player.status is PlayerStatus.THONKING or len(self.rotation) <= 1:
+            # If rotation contains only 1 player - get last player and end the game.
+            if player.status is PlayerStatus.THONKING or len(self.rotation) == 1:
                 await self.get_next_player()
 
     def set_status(self, status):
