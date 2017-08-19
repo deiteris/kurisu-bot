@@ -201,23 +201,15 @@ class GameDirector:
     async def make_all_in(self, player):
 
         if player.balance == 0:
-            await self.bot.send_message(self.channel, "You don't have enough money to go all in.")
+            await self.bot.send_message(self.channel, "You don't have money to go all in.")
             return
 
-        player_stake = player.balance + player.current_stake
+        player_stake = player.balance + player.total_stake - player.current_stake
 
-        if player_stake > self.highest_stake:
+        if player_stake >= self.highest_stake:
             self.highest_stake = player_stake
 
-        # In case of emergency - swap values
-        if player.balance > player.current_stake:
-            amount_difference = player.balance - player.current_stake
-        else:
-            amount_difference = player.current_stake - player.balance
-
-        print("Amount difference: {}".format(amount_difference))
-
-        self.process_stake(player, amount_difference, player_stake, PlayerStatus.ALLIN)
+        self.process_stake(player, player.balance, player_stake, PlayerStatus.ALLIN)
 
         await self.get_next_player()
 
