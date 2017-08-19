@@ -64,8 +64,8 @@ class Evaluator(object):
         """
         minimum = LookupTable.MAX_HIGH_CARD
 
-        all5cardcombobs = itertools.combinations(cards, 5)
-        for combo in all5cardcombobs:
+        all5cardcombos = itertools.combinations(cards, 5)
+        for combo in all5cardcombos:
 
             score = self._five(combo)
             if score < minimum:
@@ -81,8 +81,8 @@ class Evaluator(object):
         """
         minimum = LookupTable.MAX_HIGH_CARD
 
-        all5cardcombobs = itertools.combinations(cards, 5)
-        for combo in all5cardcombobs:
+        all5cardcombos = itertools.combinations(cards, 5)
+        for combo in all5cardcombos:
 
             score = self._five(combo)
             if score < minimum:
@@ -114,7 +114,7 @@ class Evaluator(object):
         elif hr <= LookupTable.MAX_HIGH_CARD:
             return LookupTable.MAX_TO_RANK_CLASS[LookupTable.MAX_HIGH_CARD]
         else:
-            raise Exception("Inavlid hand rank, cannot return rank class")
+            raise Exception("Invalid hand rank, cannot return rank class")
 
     def class_to_string(self, class_int):
         """

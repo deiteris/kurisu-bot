@@ -2,9 +2,9 @@
 # TODO: Proper prize distribution and banks
 # TODO: Clean up, refactor and sort the code
 # TODO: Describe all commands and add more info upon completion
+# TODO: Game initiator, on ready start, or stay as is?
 # FEATURE: Hand evaluation assist?
 # FEATURE: Money transfer?
-# FEATURE: Game initiator, on ready start, or stay as is?
 
 # Deuces library is used for poker hand evaluation
 # https://github.com/worldveil/deuces
@@ -260,7 +260,7 @@ class GameDirector:
             # player.set_status(PlayerStatus.FOLDED)
             self.rotation.remove(player)
             # If rotation doesn't contain players - the table will be destroyed
-            if player.status is PlayerStatus.THONKING and len(self.rotation) >= 1:
+            if player.status is PlayerStatus.THONKING or len(self.rotation) <= 1:
                 await self.get_next_player()
 
     def set_status(self, status):
@@ -273,10 +273,10 @@ class GameDirector:
                 self.turn_counter += 1
                 await asyncio.sleep(1)
             else:
-                # Don't forger to reset counter
+                # Don't forget to reset counter
                 self.turn_counter = 0
 
-                await self.bot.send_message(self.channel, "{} has been removed from table due to inactivity".format(str(player)))
+                await self.bot.send_message(self.channel, "{} has been removed from table due to inactivity".format(player.user.mention))
                 await self.remove_player(player)
         except asyncio.CancelledError:
             # And after task cancelling too
@@ -290,7 +290,7 @@ class GameDirector:
         if self.table is not None:
             embeded.add_field(name="Table bank:", value="${}".format(self.table.bank), inline=False)
         for player in self.players:
-            embeded.add_field(name=player, value="Balance: ${}\nStatus: {}".format(player.balance, player.status.name), inline=True)
+            embeded.add_field(name=str(player), value="Balance: ${}\nStatus: {}".format(player.balance, player.status.name), inline=True)
 
         await self.bot.send_message(self.channel, embed=embeded)
 
@@ -466,13 +466,12 @@ class DBFunctions:
     def write_player_data(self, player: Player):
         try:
             # NOTE: Uses Player type, other functions use discord.Member type
-            record = (player, player.balance, player.user.id)
+            record = (str(player), player.balance, player.user.id)
             self.db.execute("UPDATE poker_players SET name=?, balance=? WHERE user_id=?", record)
             self.db.commit()
         except sqlite3.Error as e:
             print(type(e).__name__)
 
-    # This function name means that we will collect more data (win count f.e.)
     def load_player_data(self, player: discord.Member):
 
         self.check_for_player(player)
@@ -511,7 +510,7 @@ class DBFunctions:
 
             if type(player) is Player:
                 player.balance += money_to_give
-                record = (player, player.balance, next_day, player.user.id)
+                record = (str(player), player.balance, next_day, player.user.id)
             elif type(player) is discord.Member:
                 player_balance = self.load_player_data(player)[3]
                 player_balance += money_to_give
@@ -535,7 +534,10 @@ class Poker:
 
     def get_game(self, server, channel):
 
-        if server.id not in self.games or channel.id not in self.games[server.id]:
+        if server.id not in self.games:
+            self.games.update({server.id: {}})
+
+        if channel.id not in self.games[server.id]:
             return None
 
         return self.games[server.id][channel.id]
@@ -545,7 +547,7 @@ class Poker:
 
         for server, channel in self.games.items():
             for game in channel.values():
-                if game.get_player(player):
+                if game.get_player(player) is not None:
                     return True
 
         return False
@@ -585,9 +587,6 @@ class Poker:
 
         game = GameDirector(self.bot, self.db_funcs, channel, GameStatus.PENDING)
         game.add_player(author)
-
-        if server.id not in self.games:
-            self.games.update({server.id: {}})
 
         self.games[server.id].update({channel.id: game})
 
