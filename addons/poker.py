@@ -216,11 +216,7 @@ class GameDirector:
             await self.bot.send_message(self.channel, "You don't have money to go all in.")
             return
 
-        if player.current_stake == 0:
-            player_stake = player.balance
-        else:
-            player_stake = player.balance + player.total_stake - player.current_stake
-            print("Player Stake = {} + {} - {}".format(player.balance, player.total_stake, player.current_stake))
+        player_stake = player.balance + player.current_stake
 
         if player_stake >= self.highest_stake:
             self.highest_stake = player_stake
@@ -242,7 +238,7 @@ class GameDirector:
 
     def set_players(self):
         # TODO: Make rotation order according to rules
-        # Check if player has balance equal to 0 at game start and remove him
+        # Check if player has balance lower than $100
         for player in self.players:
             if player.balance < 100:
                 self.players.remove(player)
@@ -288,7 +284,6 @@ class GameDirector:
             else:
                 # Don't forget to reset counter
                 self.turn_counter = 0
-
                 await self.bot.send_message(self.channel, "{} has been removed from table due to inactivity".format(player.user.mention))
                 await self.remove_player(player)
         except asyncio.CancelledError:
@@ -732,11 +727,18 @@ class Poker:
 
         server = ctx.message.server
         channel = ctx.message.channel
+        author = ctx.message.author
 
         game = self.get_game(server, channel)
 
         if not game:
             await self.bot.say("There're no ongoing games. Start new by typing \"k.poker\"!")
+            return
+
+        player = game.get_player(author)
+
+        if not player:
+            await self.bot.say("You're not playing in this game!")
             return
         elif game.status is not GameStatus.PENDING:
             await self.bot.say("The game is in process.")
