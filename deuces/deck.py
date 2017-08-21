@@ -21,7 +21,7 @@ class Deck:
         shuffle(self.deck)
 
     def draw(self, amount: int):
-        return [self.get_card() for i in range(amount)]
+        return [self.get_card() for _ in range(amount)]
 
     def get_card(self):
         return self.deck.popleft()

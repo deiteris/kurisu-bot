@@ -1,7 +1,4 @@
 # TODO LIST
-# TODO: Proper prize distribution and banks
-# TODO: Clean up, refactor and sort the code
-# TODO: Describe all commands and add more info upon completion
 # TODO: Game initiator, on ready start, or stay as is?
 # FEATURE: Hand evaluation assist?
 # FEATURE: Money transfer?
@@ -71,6 +68,8 @@ class Player:
         self.current_stake = 0
         self.total_stake = 0
         self.balance = balance
+        # TODO: Dealer chip
+        self.dealer_chip = None
 
     def add_balance(self, amount):
         self.balance += amount
@@ -97,7 +96,7 @@ class Table:
         self.players = players
         self.dealer = Dealer(self.players, self)
         self.cards = []
-        # TODO: Probably separate banks for different rounds are needed
+        # TODO: Side pots
         self.bank = 0
 
         # Distribute cards right after table was created
@@ -105,6 +104,9 @@ class Table:
 
     def add_bank(self, amount):
         self.bank += amount
+
+    def withdraw_bank(self, amount):
+        self.bank -= amount
 
     def set_players(self, players):
         self.players = players
@@ -124,7 +126,7 @@ class GameDirector:
         self.turn_timer = None
         self.players = []
         self.rotation = deque()
-        self.highest_stake = 0
+        self.round_highest_stake = 0
         self.turn_counter = 0
         self.evaluator = deuces.Evaluator()
 
@@ -132,7 +134,7 @@ class GameDirector:
     def create_table(self):
         self.table = Table(self.players)
 
-    def process_stake(self, player, amount, stake, status):
+    def process_stake(self, player: Player, amount: int, stake: int, status: PlayerStatus):
 
         print("-------------------------------")
         print("{} {}".format(str(player), status.name))
@@ -152,13 +154,13 @@ class GameDirector:
 
         player.set_status(status)
 
-    async def make_check(self, player):
+    async def make_check(self, player: Player):
 
         player.set_status(PlayerStatus.CHECKED)
 
         await self.get_next_player()
 
-    async def make_fold(self, player):
+    async def make_fold(self, player: Player):
 
         player.set_status(PlayerStatus.FOLDED)
 
@@ -166,78 +168,84 @@ class GameDirector:
 
         await self.get_next_player()
 
-    async def make_call(self, player):
+    async def make_call(self, player: Player):
 
-        if self.highest_stake == 0:
+        if self.round_highest_stake == 0:
             await self.make_check(player)
             return
 
-        if player.balance < self.highest_stake:
+        if player.balance < self.round_highest_stake:
             await self.bot.send_message(self.channel, "You don't have enough money to make call.")
             return
 
-        amount_difference = self.highest_stake - player.current_stake
+        # Difference between stake to answer on and player's current stake
+        amount_difference = self.round_highest_stake - player.current_stake
 
-        self.process_stake(player, amount_difference, self.highest_stake, PlayerStatus.CALLED)
+        self.process_stake(player, amount_difference, self.round_highest_stake, PlayerStatus.CALLED)
 
         await self.get_next_player()
 
-    async def make_bet(self, player, amount):
+    async def make_bet(self, player: Player, amount: int):
 
-        if player.balance < amount or self.highest_stake != 0:
+        if player.balance < amount or self.round_highest_stake != 0:
             await self.bot.send_message(self.channel, "You don't have enough money to make bet or use \"k.raise\" to increase stake.")
             return
 
-        self.highest_stake = amount
+        # Set initial round's highest stake
+        self.round_highest_stake = amount
 
         self.process_stake(player, amount, amount, PlayerStatus.BET)
 
         await self.get_next_player()
 
-    async def make_raise(self, player, amount):
+    async def make_raise(self, player: Player, amount: int):
 
-        raise_amount = self.highest_stake + amount
+        # Raise ON amount more than round's highest stake
+        raise_amount = self.round_highest_stake + amount
 
         if player.balance < raise_amount:
             await self.bot.send_message(self.channel, "You don't have enough money to raise stake.")
             return
 
-        self.highest_stake = raise_amount
+        # Raise is always higher than round's highest stake
+        self.round_highest_stake = raise_amount
 
+        # Difference between raised amount and current stake
         amount_difference = raise_amount - player.current_stake
 
         self.process_stake(player, amount_difference, raise_amount, PlayerStatus.RAISED)
 
         await self.get_next_player()
 
-    async def make_all_in(self, player):
+    async def make_all_in(self, player: Player):
 
         if player.balance == 0:
             await self.bot.send_message(self.channel, "You don't have money to go all in.")
             return
 
+        # Player's stake in current round must be sum of player's balance and his current stake
         player_stake = player.balance + player.current_stake
 
-        if player_stake >= self.highest_stake:
-            self.highest_stake = player_stake
+        # If this stake is higher than round's highest stake - set new round's highest stake
+        if player_stake > self.round_highest_stake:
+            self.round_highest_stake = player_stake
 
         self.process_stake(player, player.balance, player_stake, PlayerStatus.ALLIN)
 
         await self.get_next_player()
 
-    def take_blind(self, player):
+    def take_blind(self, player: Player):
 
         SMALL_BLIND = 20
         BIG_BLING = SMALL_BLIND + 20
 
-        self.highest_stake = BIG_BLING
+        self.round_highest_stake = BIG_BLING
 
         self.process_stake(player, SMALL_BLIND, SMALL_BLIND, PlayerStatus.BLINDED)
 
         self.db_funcs.write_player_data(player)
 
     def set_players(self):
-        # TODO: Make rotation order according to rules
         # Check if player has balance lower than $100
         for player in self.players:
             if player.balance < 100:
@@ -247,20 +255,22 @@ class GameDirector:
         # Copy players array to rotation
         self.rotation = deque(self.players)
 
-    def add_player(self, player):
+    def add_player(self, author: discord.Member):
 
-        balance = self.db_funcs.load_player_data(player)[3]
+        balance = self.db_funcs.load_player_data(author)[3]
 
-        self.players.append(Player(player.id, player, PlayerStatus.WAITING, balance))
+        player = Player(author.id, author, PlayerStatus.WAITING, balance)
 
-    def get_player(self, author):
+        self.players.append(player)
+
+    def get_player(self, author: discord.Member):
         for player in self.players:
             if author.id in player.id:
                 return player
 
         return None
 
-    async def remove_player(self, player):
+    async def remove_player(self, player: Player):
 
         # If there are no players - the table will be destroyed
         self.players.remove(player)
@@ -272,10 +282,18 @@ class GameDirector:
             if player.status is PlayerStatus.THONKING or len(self.rotation) == 1:
                 await self.get_next_player()
 
-    def set_status(self, status):
+    def give_money(self, player: Player, amount: int):
+        # Take money from the table
+        self.table.withdraw_bank(amount)
+        # Give them to player
+        player.add_balance(amount)
+
+        self.db_funcs.write_player_data(player)
+
+    def set_status(self, status: GameStatus):
         self.status = status
 
-    async def turn_timer_task(self, player):
+    async def turn_timer_task(self, player: Player):
         try:
             # 20 seconds of inactivity
             while self.turn_counter < 90:
@@ -284,8 +302,8 @@ class GameDirector:
             else:
                 # Don't forget to reset counter
                 self.turn_counter = 0
-                await self.bot.send_message(self.channel, "{} has been removed from table due to inactivity".format(player.user.mention))
                 await self.remove_player(player)
+                await self.bot.send_message(self.channel, "{} has been removed from table due to inactivity".format(player.user.mention))
         except asyncio.CancelledError:
             # And after task cancelling too
             self.turn_counter = 0
@@ -293,7 +311,7 @@ class GameDirector:
     async def get_table_info(self):
 
         embeded = discord.Embed(title='Table Info', description="Channel: {}".format(self.channel.name), color=0xEE8700)
-        embeded.add_field(name="Total players:", value=str(len(self.players)), inline=True)
+        embeded.add_field(name="Total players:", value="{}/10".format(str(len(self.players))), inline=True)
         embeded.add_field(name="Game status:", value=self.status.name, inline=False)
         if self.table is not None:
             embeded.add_field(name="Table bank:", value="${}".format(self.table.bank), inline=False)
@@ -329,13 +347,13 @@ class GameDirector:
 
         await self.bot.send_message(self.channel, "{}'s turn.\nCurrent table bank is: ${}".format(player.user.mention, self.table.bank))
 
-    async def set_next_round(self, status):
+    async def set_next_round(self, status: GameStatus):
 
         for player in self.rotation:
             # Reset states and nullify current stakes
             player.set_status(PlayerStatus.WAITING)
             player.current_stake = 0
-            self.highest_stake = 0
+            self.round_highest_stake = 0
 
         self.set_status(status)
         self.table.get_dealer().place_cards()
@@ -348,7 +366,7 @@ class GameDirector:
         # Reset status
         self.set_status(GameStatus.PENDING)
 
-        # Reset stakes and hands
+        # Reset statuses, stakes and hands
         for player in self.players:
             player.set_status(PlayerStatus.WAITING)
             player.hand = []
@@ -362,7 +380,7 @@ class GameDirector:
         self.turn_timer = None
 
         # Reset initial highest stake
-        self.highest_stake = 0
+        self.round_highest_stake = 0
 
         # Burn the table
         self.table = None
@@ -372,9 +390,7 @@ class GameDirector:
         # Before we check for next round we need to make sure it's necessary
         if len(self.rotation) == 1:
             last_player = self.rotation.popleft()
-            last_player.add_balance(self.table.bank)
-
-            self.db_funcs.write_player_data(last_player)
+            self.give_money(last_player, self.table.bank)
 
             # Reset game
             self.reset_game()
@@ -388,13 +404,13 @@ class GameDirector:
         for player in self.rotation:
             # We need to check if all stakes are equal to the highest one.
             # Except the case when player went all-in.
-            print("{} < {}?".format(player.current_stake, self.highest_stake))
-            if player.current_stake < self.highest_stake and player.balance != 0:
+            if player.current_stake < self.round_highest_stake and player.balance != 0:
                 player.set_status(PlayerStatus.WAITING)
 
             # And if we found player who is waiting and has non-zero balance - continue current round.
             if player.status is PlayerStatus.WAITING:
                 is_new_round = False
+                break
 
         # If all players made their moves - proceed to next round
         if is_new_round:
@@ -409,7 +425,7 @@ class GameDirector:
                 # Update game status
                 self.set_status(GameStatus.PENDING)
 
-                # TODO: Prize distribution (when banks are finished)
+                # TODO: Prize distribution (when side pots are finished)
 
                 winners = []
                 players_cards = ""
@@ -441,16 +457,15 @@ class GameDirector:
                         winners[0].user.mention, class_string, players_cards
                     )
                     # Give bank to winner
-                    winners[0].add_balance(self.table.bank)
-                    self.db_funcs.write_player_data(winners[0])
+                    self.give_money(winners[0], self.table.bank)
                 else:
                     msg = "Players {} are tied for the win with {}.\n{}\nEnd of game. Type \"k.start\" to start game again.".format(
                         ", ".join(map(str, winners)), class_string, players_cards
                     )
-                    # Return players' stakes
+                    # Return winners' stakes + win amount
                     for winner in winners:
-                        winner.add_balance(winner.total_stake)
-                        self.db_funcs.write_player_data(winner)
+                        win_amount = self.table.bank // len(winners) - winner.total_stake
+                        self.give_money(winner, winner.total_stake + win_amount)
 
                 # Reset game
                 self.reset_game()
@@ -738,7 +753,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
         elif game.status is not GameStatus.PENDING:
             await self.bot.say("The game is in process.")
@@ -779,7 +794,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
@@ -829,7 +844,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
@@ -862,7 +877,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
@@ -898,7 +913,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
@@ -928,7 +943,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
@@ -958,7 +973,7 @@ class Poker:
         player = game.get_player(author)
 
         if not player:
-            await self.bot.say("You're not playing in this game!")
+            await self.bot.say("You're not participating in this game!")
             return
         elif game.status is GameStatus.PENDING:
             await self.bot.say("Game is not running.")
