@@ -1,7 +1,6 @@
 # TODO LIST
 # TODO: Game initiator, on ready start, or stay as is?
 # FEATURE: Hand evaluation assist?
-# FEATURE: Money transfer?
 
 # Deuces library is used for poker hand evaluation
 # https://github.com/worldveil/deuces
@@ -10,6 +9,8 @@ import deuces
 import sqlite3
 import asyncio
 import discord
+from addons import utils
+from operator import attrgetter
 from discord.ext import commands
 from enum import Enum, auto
 from collections import deque
@@ -68,8 +69,6 @@ class Player:
         self.current_stake = 0
         self.total_stake = 0
         self.balance = balance
-        # TODO: Dealer chip
-        self.dealer_chip = None
 
     def add_balance(self, amount):
         self.balance += amount
@@ -96,7 +95,6 @@ class Table:
         self.players = players
         self.dealer = Dealer(self.players, self)
         self.cards = []
-        # TODO: Side pots
         self.bank = 0
 
         # Distribute cards right after table was created
@@ -124,6 +122,7 @@ class GameDirector:
         self.db_funcs = db_funcs
         self.table = None
         self.turn_timer = None
+        self.pot_count = 0
         self.players = []
         self.rotation = deque()
         self.round_highest_stake = 0
@@ -163,8 +162,6 @@ class GameDirector:
     async def make_fold(self, player: Player):
 
         player.set_status(PlayerStatus.FOLDED)
-
-        self.rotation.remove(player)
 
         await self.get_next_player()
 
@@ -327,7 +324,7 @@ class GameDirector:
             self.turn_timer.cancel()
 
         # Get next round
-        await self.get_next_round()
+        await self.get_next_round(self.rotation)
 
         # Avoid errors after setting GameStatus to PENDING
         if self.status is GameStatus.PENDING:
@@ -335,6 +332,11 @@ class GameDirector:
 
         # Move out player
         player = self.rotation.popleft()
+
+        # If this player folded - keep him in rotation, skip and take next one
+        if player.status is PlayerStatus.FOLDED:
+            self.rotation.append(player)
+            player = self.rotation.popleft()
 
         # Put him in the end of rotation
         self.rotation.append(player)
@@ -382,26 +384,97 @@ class GameDirector:
         # Reset initial highest stake
         self.round_highest_stake = 0
 
+        # Reset pot count
+        self.pot_count = 0
+
         # Burn the table
         self.table = None
 
-    async def get_next_round(self):
+    async def find_winners(self, players, pot: int):
 
-        # Before we check for next round we need to make sure it's necessary
-        if len(self.rotation) == 1:
-            last_player = self.rotation.popleft()
-            self.give_money(last_player, self.table.bank)
+        winners = []
+        players_cards = ""
 
-            # Reset game
-            self.reset_game()
+        # NOTE: Lower value - higher rank
+        best_rank = 7463  # Set rank lower than lowest possible hand (7462)
 
-            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n"
-                                                      "Type \"k.start\" to start game again.".format(last_player.user.mention))
+        for player in players:
+
+            if player.status is PlayerStatus.FOLDED:
+                continue
+
+            rank = self.evaluator.evaluate(player.hand, self.table.cards)
+
+            print("{}'s hand rank: {}".format(player, rank))
+
+            cards = [deuces.Card.int_to_pretty_str(card) for card in player.hand]
+            players_cards += "{}'s hand: {}\n".format(player, " and ".join(cards))
+
+            # Detect winner
+            if rank == best_rank:
+                winners.append(player)
+                best_rank = rank
+            elif rank < best_rank:
+                winners = [player]
+                best_rank = rank
+
+        rank_class = self.evaluator.get_rank_class(best_rank)
+        class_string = self.evaluator.class_to_string(rank_class)
+
+        str_pot = "main pot with amount of {}".format(pot) if self.pot_count == 0 else "side pot {} with amount of {}".format(self.pot_count, pot)
+        if len(winners) == 1:
+            msg = "Player {} wins {} with {}.\n".format(
+                winners[0].user.mention, str_pot, class_string
+            )
+            # Give pot to winner
+            self.give_money(winners[0], pot)
+        else:
+            msg = "Players {} are tied for {} with {}.\n".format(
+                ", ".join(map(str, winners)), str_pot, class_string
+            )
+            # Return winners' stakes + win amount
+            for winner in winners:
+                win_amount = pot // len(winners)
+                self.give_money(winner, winner.total_stake + win_amount)
+
+        self.pot_count += 1
+
+        # Rate limit
+        await asyncio.sleep(1)
+        await self.bot.send_message(self.channel, msg)
+
+    async def calculate_pots(self, players):
+
+        if len(players) == 1:
+            self.give_money(players[0], players[0].total_stake)
             return
+        elif len(players) == 0:
+            return
+
+        lowest_stake = players[0].total_stake
+
+        pot = lowest_stake * len(players)
+
+        await self.find_winners(players, pot)
+
+        for player in players:
+            player.total_stake -= lowest_stake
+
+        del players[0]
+
+        await self.calculate_pots(players)
+
+    async def get_next_round(self, rotation):
 
         is_new_round = True
 
-        for player in self.rotation:
+        # Check for active players in rotation
+        active_players = []
+        for player in rotation:
+            if player.status is not PlayerStatus.FOLDED:
+                active_players.append(player)
+
+        for player in rotation:
             # We need to check if all stakes are equal to the highest one.
             # Except the case when player went all-in.
             if player.current_stake < self.round_highest_stake and player.balance != 0:
@@ -411,6 +484,18 @@ class GameDirector:
             if player.status is PlayerStatus.WAITING:
                 is_new_round = False
                 break
+
+        # Before we check for next round we need to make sure it's necessary
+        if len(active_players) == 1:
+            last_player = active_players.pop(0)
+            self.give_money(last_player, self.table.bank)
+
+            # Reset game
+            self.reset_game()
+
+            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n"
+                                                      "Type \"k.start\" to start game again.".format(last_player.user.mention))
+            return
 
         # If all players made their moves - proceed to next round
         if is_new_round:
@@ -425,52 +510,20 @@ class GameDirector:
                 # Update game status
                 self.set_status(GameStatus.PENDING)
 
-                # TODO: Prize distribution (when side pots are finished)
+                # Sort players by total stakes
+                compare = attrgetter("total_stake")
+                # Since deque can't be sorted - put values to list
+                players = []
+                players.extend(rotation)
+                players.sort(key=compare, reverse=False)
 
-                winners = []
-                players_cards = ""
-
-                # NOTE: Lower value - higher rank
-                best_rank = 7463  # Set rank lower than lowest possible hand (7462)
-
-                for player in self.rotation:
-                    rank = self.evaluator.evaluate(player.hand, self.table.cards)
-
-                    print("{}'s hand rank: {}".format(player, rank))
-
-                    cards = [deuces.Card.int_to_pretty_str(card) for card in player.hand]
-                    players_cards += "{}'s hand: {}\n".format(player, " and ".join(cards))
-
-                    # Detect winner
-                    if rank == best_rank:
-                        winners.append(player)
-                        best_rank = rank
-                    elif rank < best_rank:
-                        winners = [player]
-                        best_rank = rank
-
-                rank_class = self.evaluator.get_rank_class(best_rank)
-                class_string = self.evaluator.class_to_string(rank_class)
-
-                if len(winners) == 1:
-                    msg = "The winner is {} with {}.\n{}\nEnd of game. Type \"k.start\" to start game again.".format(
-                        winners[0].user.mention, class_string, players_cards
-                    )
-                    # Give bank to winner
-                    self.give_money(winners[0], self.table.bank)
-                else:
-                    msg = "Players {} are tied for the win with {}.\n{}\nEnd of game. Type \"k.start\" to start game again.".format(
-                        ", ".join(map(str, winners)), class_string, players_cards
-                    )
-                    # Return winners' stakes + win amount
-                    for winner in winners:
-                        win_amount = self.table.bank // len(winners) - winner.total_stake
-                        self.give_money(winner, winner.total_stake + win_amount)
+                # Calculate pots and distribute money
+                await self.calculate_pots(players)
 
                 # Reset game
                 self.reset_game()
 
-                await self.bot.send_message(self.channel, msg)
+                await self.bot.send_message(self.channel, "End of game. Type \"k.start\" to start the game again.")
 
 
 class DBFunctions:
@@ -522,7 +575,7 @@ class DBFunctions:
             print(type(e).__name__)
 
     # Combines both types, discord.Member and Player
-    def give_money(self, player):
+    def claim_money(self, player):
 
         self.check_for_player(player)
 
@@ -541,6 +594,54 @@ class DBFunctions:
                 record = (str(player), player_balance, next_day, player.id)
 
             self.db.execute("UPDATE poker_players SET name=?, balance=?, next_claim_time=strftime('%s','now') + ? WHERE user_id=?", record)
+            self.db.commit()
+        except sqlite3.Error as e:
+            print(type(e).__name__)
+
+    def give_money(self, sender, recipient, amount: int):
+
+        self.check_for_player(sender)
+        self.check_for_player(recipient)
+
+        sender_balance = self.load_player_data(sender)[3]
+
+        if sender_balance < amount:
+            return False
+
+        self.take_money(sender, amount)
+
+        try:
+            record = ()
+
+            if type(recipient) is Player:
+                recipient.balance += amount
+                record = (str(recipient), recipient.balance, recipient.user.id)
+            elif type(recipient) is discord.Member:
+                player_balance = self.load_player_data(recipient)[3]
+                player_balance += amount
+                record = (str(recipient), player_balance, recipient.id)
+
+            self.db.execute("UPDATE poker_players SET name=?, balance=? WHERE user_id=?", record)
+            self.db.commit()
+        except sqlite3.Error as e:
+            print(type(e).__name__)
+
+        return True
+
+    def take_money(self, sender, amount: int):
+
+        try:
+            record = ()
+
+            if type(sender) is Player:
+                sender.balance -= amount
+                record = (str(sender), sender.balance, sender.user.id)
+            elif type(sender) is discord.Member:
+                player_balance = self.load_player_data(sender)[3]
+                player_balance -= amount
+                record = (str(sender), player_balance, sender.id)
+
+            self.db.execute("UPDATE poker_players SET name=?, balance=? WHERE user_id=?", record)
             self.db.commit()
         except sqlite3.Error as e:
             print(type(e).__name__)
@@ -567,14 +668,15 @@ class Poker:
         return self.games[server.id][channel.id]
 
     # Don't allow player to participate in multiple games
-    def player_lookup(self, player):
+    def player_lookup(self, player: discord.Member):
 
         for server, channel in self.games.items():
             for game in channel.values():
-                if game.get_player(player) is not None:
-                    return True
+                player = game.get_player(player)
+                if player is not None:
+                    return player
 
-        return False
+        return None
 
     # General actions
     @commands.command(pass_context=True, no_pm=True)
@@ -698,8 +800,6 @@ class Poker:
         """
 
         author = ctx.message.author
-        server = ctx.message.server
-        channel = ctx.message.channel
         cursor = self.bot.db.cursor()
 
         cursor.execute("SELECT * FROM poker_players WHERE next_claim_time > strftime('%s','now') and user_id=?", (author.id,))
@@ -710,18 +810,52 @@ class Poker:
             await self.bot.say("You have already claimed your daily prize today!")
             return
 
-        game = self.get_game(server, channel)
+        # Since we can use this command in any other channel - look up player
+        player = self.player_lookup(author)
 
-        if game:
-            # Update balance in game and database
-            player = game.get_player(author)
-            if player:
-                self.db_funcs.give_money(player)
-        else:
-            # Update balance only in database (and create record if it doesn't exist)
-            self.db_funcs.give_money(author)
+        requester = player if player else author
+
+        self.db_funcs.claim_money(requester)
 
         await self.bot.say("You have successfully claimed daily prize!")
+
+    @commands.command(pass_context=True, no_pm=False)
+    async def transfer(self, ctx, name: str, amount: int):
+        """
+        Transfer money to other player
+        """
+
+        if amount <= 0:
+            await self.bot.say("Invalid amount.")
+            return
+
+        author = ctx.message.author
+
+        members = await utils.get_members(self.bot, ctx.message, name)
+
+        if members is None:
+            return
+
+        member = ctx.message.server.get_member_named(members[0])
+
+        if member == author:
+            await self.bot.say("You can't transfer money to yourself.")
+            return
+
+        # Same as in 'claim' command - get games and find players in them
+        player_sender = self.player_lookup(author)
+        player_recipient = self.player_lookup(member)
+
+        sender = player_sender if player_sender else author
+        recipient = player_recipient if player_recipient else member
+
+        result = self.db_funcs.give_money(sender, recipient, amount)
+
+        if not result:
+            await self.bot.say("You don't have enough money to transfer.")
+            return
+
+        await self.bot.say("You've successfully transfered ${} to {}".format(amount, member.name))
 
     @commands.command(pass_context=True, no_pm=False, aliases=['bal'])
     async def balance(self, ctx):
@@ -861,7 +995,8 @@ class Poker:
         Open round with stake.
         """
 
-        if amount < 0:
+        if amount <= 0:
+            await self.bot.say("Invalid amount.")
             return
 
         author = ctx.message.author
@@ -897,7 +1032,8 @@ class Poker:
         Increase the amount of current stake ON given amount.
         """
 
-        if amount < 0:
+        if amount <= 0:
+            await self.bot.say("Invalid amount.")
             return
 
         author = ctx.message.author
