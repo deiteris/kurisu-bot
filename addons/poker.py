@@ -1,6 +1,5 @@
 # TODO LIST
 # TODO: Game initiator, on ready start, or stay as is?
-# FEATURE: Hand evaluation assist?
 
 # Deuces library is used for poker hand evaluation
 # https://github.com/worldveil/deuces
@@ -155,6 +154,10 @@ class GameDirector:
 
     async def make_check(self, player: Player):
 
+        if player.balance != 0 and player.current_stake < self.round_highest_stake:
+            await self.bot.send_message(self.channel, "You're not allowed to check.")
+            return
+
         player.set_status(PlayerStatus.CHECKED)
 
         await self.get_next_player()
@@ -184,8 +187,11 @@ class GameDirector:
 
     async def make_bet(self, player: Player, amount: int):
 
-        if player.balance < amount or self.round_highest_stake != 0:
-            await self.bot.send_message(self.channel, "You don't have enough money to make bet or use \"k.raise\" to increase stake.")
+        if player.balance < amount:
+            await self.bot.send_message(self.channel, "You don't have enough money to make bet.")
+            return
+        elif self.round_highest_stake != 0:
+            await self.bot.send_message(self.channel, "You can't use bet. Use \"k.raise\" to raise stake.")
             return
 
         # Set initial round's highest stake
@@ -317,6 +323,28 @@ class GameDirector:
 
         await self.bot.send_message(self.channel, embed=embeded)
 
+    def get_available_actions(self, player):
+        msg = ""
+
+        if player.balance >= self.round_highest_stake != 0:
+            msg += "Raise stake - k.raise <amount>\n"
+            msg += "Call to ${} - k.call\n".format(self.round_highest_stake)
+            msg += "Go all-in - k.all-in\n"
+            msg += "Fold - k.fold\n"
+        elif player.balance > self.round_highest_stake == 0:
+            msg += "Bet money - k.bet <amount>\n"
+            msg += "Check - k.check\n"
+            msg += "Go all-in - k.all-in\n"
+            msg += "Fold - k.fold\n"
+        elif player.balance == 0:
+            msg += "Check - k.check\n"
+            msg += "Fold - k.fold\n"
+        elif player.balance < self.round_highest_stake:
+            msg += "Go all-in - k.all-in\n"
+            msg += "Fold - k.fold\n"
+
+        return msg
+
     async def get_next_player(self):
 
         # Cancel timer
@@ -347,9 +375,15 @@ class GameDirector:
         # Set player status
         player.set_status(PlayerStatus.THONKING)
 
-        await self.bot.send_message(self.channel, "{}'s turn.\nCurrent table bank is: ${}".format(player.user.mention, self.table.bank))
+        actions = self.get_available_actions(player)
+
+        await self.bot.send_message(self.channel, "{}'s turn.\n\n"
+                                                  "**Available actions:**\n{}\n"
+                                                  "Current table bank is: ${}".format(player.user.mention, actions, self.table.bank))
 
     async def set_next_round(self, status: GameStatus):
+
+        self.table.get_dealer().place_cards()
 
         for player in self.rotation:
             # Reset states and nullify current stakes
@@ -357,8 +391,14 @@ class GameDirector:
             player.current_stake = 0
             self.round_highest_stake = 0
 
+            # Evaluate player's hand and let him know about his current combination
+            rank = self.evaluator.evaluate(player.hand, self.table.cards)
+            rank_class = self.evaluator.get_rank_class(rank)
+            class_string = self.evaluator.class_to_string(rank_class)
+
+            await self.bot.send_message(player.user, "Current combination: **{}**".format(class_string))
+
         self.set_status(status)
-        self.table.get_dealer().place_cards()
 
         cards = [deuces.Card.int_to_pretty_str(card) for card in self.table.cards]
 
@@ -393,7 +433,6 @@ class GameDirector:
     async def find_winners(self, players, pot: int):
 
         winners = []
-        players_cards = ""
 
         # NOTE: Lower value - higher rank
         best_rank = 7463  # Set rank lower than lowest possible hand (7462)
@@ -404,11 +443,6 @@ class GameDirector:
                 continue
 
             rank = self.evaluator.evaluate(player.hand, self.table.cards)
-
-            print("{}'s hand rank: {}".format(player, rank))
-
-            cards = [deuces.Card.int_to_pretty_str(card) for card in player.hand]
-            players_cards += "{}'s hand: {}\n".format(player, " and ".join(cards))
 
             # Detect winner
             if rank == best_rank:
@@ -421,17 +455,13 @@ class GameDirector:
         rank_class = self.evaluator.get_rank_class(best_rank)
         class_string = self.evaluator.class_to_string(rank_class)
 
-        str_pot = "main pot with amount of {}".format(pot) if self.pot_count == 0 else "side pot {} with amount of {}".format(self.pot_count, pot)
+        str_pot = "main pot with amount of ${}".format(pot) if self.pot_count == 0 else "side pot {} with amount of ${}".format(self.pot_count, pot)
         if len(winners) == 1:
-            msg = "Player {} wins {} with {}.\n".format(
-                winners[0].user.mention, str_pot, class_string
-            )
+            msg = "Player {} wins {} with {}.\n".format(winners[0].user.mention, str_pot, class_string)
             # Give pot to winner
             self.give_money(winners[0], pot)
         else:
-            msg = "Players {} are tied for {} with {}.\n".format(
-                ", ".join(map(str, winners)), str_pot, class_string
-            )
+            msg = "Players {} are tied for {} with {}.\n".format(", ".join(map(str, winners)), str_pot, class_string)
             # Return winners' stakes + win amount
             for winner in winners:
                 win_amount = pot // len(winners)
@@ -439,9 +469,7 @@ class GameDirector:
 
         self.pot_count += 1
 
-        # Rate limit
-        await asyncio.sleep(1)
-        await self.bot.send_message(self.channel, msg)
+        return msg
 
     async def calculate_pots(self, players):
 
@@ -455,7 +483,7 @@ class GameDirector:
 
         pot = lowest_stake * len(players)
 
-        await self.find_winners(players, pot)
+        msg = await self.find_winners(players, pot)
 
         for player in players:
             player.total_stake -= lowest_stake
@@ -463,6 +491,8 @@ class GameDirector:
         del players[0]
 
         await self.calculate_pots(players)
+
+        return msg
 
     async def get_next_round(self, rotation):
 
@@ -493,7 +523,7 @@ class GameDirector:
             # Reset game
             self.reset_game()
 
-            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n"
+            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n\n"
                                                       "Type \"k.start\" to start game again.".format(last_player.user.mention))
             return
 
@@ -518,12 +548,25 @@ class GameDirector:
                 players.sort(key=compare, reverse=False)
 
                 # Calculate pots and distribute money
-                await self.calculate_pots(players)
+                msg = []
+                msg.append(await self.calculate_pots(players))
+
+                # Collect players' hands and compile message
+                players_cards = ""
+                for player in rotation:
+
+                    if player.status is PlayerStatus.FOLDED:
+                        continue
+
+                    cards = [deuces.Card.int_to_pretty_str(card) for card in player.hand]
+                    players_cards += "{}'s hand: {}\n".format(player, " and ".join(cards))
 
                 # Reset game
                 self.reset_game()
 
-                await self.bot.send_message(self.channel, "End of game. Type \"k.start\" to start the game again.")
+                await self.bot.send_message(self.channel, "{}"
+                                                          "**Players' hands:**\n{}\n"
+                                                          "End of game. Type \"k.start\" to start the game again.".format("".join(msg), players_cards))
 
 
 class DBFunctions:
@@ -936,9 +979,6 @@ class Poker:
         elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
             return
-        elif game.status is GameStatus.PREFLOP:
-            await self.bot.say("You can't check during pre-flop round.")
-            return
 
         await game.make_check(player)
 
@@ -1019,9 +1059,6 @@ class Poker:
             return
         elif player.status is not PlayerStatus.THONKING:
             await self.bot.say("You can't make any actions!")
-            return
-        elif game.status is GameStatus.PREFLOP:
-            await self.bot.say("You can't bet during pre-flop round.")
             return
 
         await game.make_bet(player, amount)
