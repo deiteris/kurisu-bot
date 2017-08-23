@@ -1,6 +1,3 @@
-# TODO LIST
-# TODO: Game initiator, on ready start, or stay as is?
-
 # Deuces library is used for poker hand evaluation
 # https://github.com/worldveil/deuces
 
@@ -430,7 +427,7 @@ class GameDirector:
         # Burn the table
         self.table = None
 
-    async def find_winners(self, players, pot: int):
+    def find_winners(self, players, pot: int):
 
         winners = []
 
@@ -471,7 +468,7 @@ class GameDirector:
 
         return msg
 
-    async def calculate_pots(self, players):
+    def calculate_pots(self, players):
 
         if len(players) == 1:
             self.give_money(players[0], players[0].total_stake)
@@ -483,14 +480,12 @@ class GameDirector:
 
         pot = lowest_stake * len(players)
 
-        msg = await self.find_winners(players, pot)
+        msg = self.find_winners(players, pot)
 
         for player in players:
             player.total_stake -= lowest_stake
 
         del players[0]
-
-        await self.calculate_pots(players)
 
         return msg
 
@@ -543,13 +538,11 @@ class GameDirector:
                 # Sort players by total stakes
                 compare = attrgetter("total_stake")
                 # Since deque can't be sorted - put values to list
-                players = []
-                players.extend(rotation)
+                players = list(rotation)
                 players.sort(key=compare, reverse=False)
 
                 # Calculate pots and distribute money
-                msg = []
-                msg.append(await self.calculate_pots(players))
+                msg = [self.calculate_pots(players) for _ in range(len(rotation) - 1)]
 
                 # Collect players' hands and compile message
                 players_cards = ""
@@ -740,13 +733,11 @@ class Poker:
             await self.bot.say("There's an ongoing game! Type \"k.join\" to join the table!")
             return
 
-        # The only case when we need to check if there a games - when we're creating new game
-        if len(self.games) > 0:
-            lookup_result = self.player_lookup(author)
+        lookup_result = self.player_lookup(author)
 
-            if lookup_result:
-                await self.bot.say("You're not allowed to play in more than one game!")
-                return
+        if lookup_result:
+            await self.bot.say("You're not allowed to play in more than one game!")
+            return
 
         player_balance = self.db_funcs.load_player_data(author)[3]
 
@@ -784,8 +775,6 @@ class Poker:
             await self.bot.say("You're participating in this game!")
             return
 
-        # Since we're checking if there're any games before join
-        # There's no possibility that games will be equal to zero
         lookup_result = self.player_lookup(author)
 
         if lookup_result:
@@ -795,7 +784,7 @@ class Poker:
         player_balance = self.db_funcs.load_player_data(author)[3]
 
         if player_balance < 100:
-            await self.bot.say("You don't have enough money to participate in game.")
+            await self.bot.say("You don't have enough money to participate in0571 game.")
             return
         elif len(game.players) == 10:
             await self.bot.say("Table limit is 10 people.")
@@ -911,6 +900,7 @@ class Poker:
         player_balance = self.db_funcs.load_player_data(author)[3]
         await self.bot.say("Your balance is ${}".format(player_balance))
 
+    # TODO: Game initiator, on ready start, or stay as is?
     @commands.command(pass_context=True, no_pm=True)
     async def start(self, ctx):
         """
