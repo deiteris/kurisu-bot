@@ -784,7 +784,7 @@ class Poker:
         player_balance = self.db_funcs.load_player_data(author)[3]
 
         if player_balance < 100:
-            await self.bot.say("You don't have enough money to participate in0571 game.")
+            await self.bot.say("You don't have enough money to participate in game.")
             return
         elif len(game.players) == 10:
             await self.bot.say("Table limit is 10 people.")
