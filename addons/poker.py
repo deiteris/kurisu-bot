@@ -127,7 +127,7 @@ class GameDirector:
 
     # Game functions
     def create_table(self):
-        self.table = Table(self.players)
+        self.table = Table(list(self.players))
 
     def process_stake(self, player: Player, amount: int, stake: int, status: PlayerStatus):
 
@@ -162,6 +162,8 @@ class GameDirector:
     async def make_fold(self, player: Player):
 
         player.set_status(PlayerStatus.FOLDED)
+
+        self.rotation.remove(player)
 
         await self.get_next_player()
 
@@ -237,19 +239,20 @@ class GameDirector:
     def take_blind(self, player: Player):
 
         SMALL_BLIND = 20
-        BIG_BLING = SMALL_BLIND + 20
+        BIG_BLIND = SMALL_BLIND + 20
 
-        self.round_highest_stake = BIG_BLING
+        self.round_highest_stake = BIG_BLIND
 
         self.process_stake(player, SMALL_BLIND, SMALL_BLIND, PlayerStatus.BLINDED)
 
         self.db_funcs.write_player_data(player)
 
     def set_players(self):
-        # Check if player has balance lower than $100
-        for player in self.players:
+        # Check if player has balance lower than $100 and remove him from the game
+        for player in self.table.players:
             if player.balance < 100:
                 self.players.remove(player)
+                self.table.players.remove(player)
             else:
                 self.take_blind(player)
         # Copy players array to rotation
@@ -265,7 +268,7 @@ class GameDirector:
 
     def get_player(self, author: discord.Member):
         for player in self.players:
-            if author.id in player.id:
+            if author.id == player.id:
                 return player
 
         return None
@@ -277,13 +280,15 @@ class GameDirector:
 
         # Variables are uninitialized if game is not in process
         if self.status is not GameStatus.PENDING:
+            # Remove player from rotation, but let him be in table, since we need him in pots calculations
             self.rotation.remove(player)
             # If rotation contains only 1 player - get last player and end the game.
             if player.status is PlayerStatus.THONKING or len(self.rotation) == 1:
+                player.set_status(PlayerStatus.FOLDED)
                 await self.get_next_player()
 
     def give_money(self, player: Player, amount: int):
-        # Take money from the table
+        # Take money from the table bank
         self.table.withdraw_bank(amount)
         # Give them to player
         player.add_balance(amount)
@@ -357,11 +362,6 @@ class GameDirector:
 
         # Move out player
         player = self.rotation.popleft()
-
-        # If this player folded - keep him in rotation, skip and take next one
-        if player.status is PlayerStatus.FOLDED:
-            self.rotation.append(player)
-            player = self.rotation.popleft()
 
         # Put him in the end of rotation
         self.rotation.append(player)
@@ -472,7 +472,10 @@ class GameDirector:
 
         if len(players) == 1:
             self.give_money(players[0], players[0].total_stake)
-            return
+            if players[0].total_stake == 0:
+                return "\n"
+            else:
+                return "${} were returned to {}\n".format(players[0].total_stake, players[0].user.mention)
         elif len(players) == 0:
             return
 
@@ -491,13 +494,19 @@ class GameDirector:
 
     async def get_next_round(self, rotation):
 
-        is_new_round = True
+        # Before we check for next round we need to make sure it's necessary
+        if len(rotation) == 1:
+            last_player = self.rotation.popleft()
+            self.give_money(last_player, self.table.bank)
 
-        # Check for active players in rotation
-        active_players = []
-        for player in rotation:
-            if player.status is not PlayerStatus.FOLDED:
-                active_players.append(player)
+            # Reset game
+            self.reset_game()
+
+            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n\n"
+                                                      "Type \"k.start\" to start game again.".format(last_player.user.mention))
+            return
+
+        is_new_round = True
 
         for player in rotation:
             # We need to check if all stakes are equal to the highest one.
@@ -509,18 +518,6 @@ class GameDirector:
             if player.status is PlayerStatus.WAITING:
                 is_new_round = False
                 break
-
-        # Before we check for next round we need to make sure it's necessary
-        if len(active_players) == 1:
-            last_player = active_players.pop(0)
-            self.give_money(last_player, self.table.bank)
-
-            # Reset game
-            self.reset_game()
-
-            await self.bot.send_message(self.channel, "As the last man standing, {} wins and gets the bank!\n\n"
-                                                      "Type \"k.start\" to start game again.".format(last_player.user.mention))
-            return
 
         # If all players made their moves - proceed to next round
         if is_new_round:
@@ -537,12 +534,11 @@ class GameDirector:
 
                 # Sort players by total stakes
                 compare = attrgetter("total_stake")
-                # Since deque can't be sorted - put values to list
-                players = list(rotation)
+                players = list(self.table.players)
                 players.sort(key=compare, reverse=False)
 
                 # Calculate pots and distribute money
-                msg = [self.calculate_pots(players) for _ in range(len(rotation) - 1)]
+                msg = [self.calculate_pots(players) for _ in range(len(self.table.players))]
 
                 # Collect players' hands and compile message
                 players_cards = ""
@@ -557,7 +553,7 @@ class GameDirector:
                 # Reset game
                 self.reset_game()
 
-                await self.bot.send_message(self.channel, "{}"
+                await self.bot.send_message(self.channel, "{}\n"
                                                           "**Players' hands:**\n{}\n"
                                                           "End of game. Type \"k.start\" to start the game again.".format("".join(msg), players_cards))
 
@@ -708,9 +704,9 @@ class Poker:
 
         for server, channel in self.games.items():
             for game in channel.values():
-                player = game.get_player(player)
-                if player is not None:
-                    return player
+                found_player = game.get_player(player)
+                if found_player is not None:
+                    return found_player
 
         return None
 
