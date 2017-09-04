@@ -1,5 +1,5 @@
 from random import shuffle
-from deuces.card import Card
+from addons.deuces.card import Card
 from collections import deque
 
 

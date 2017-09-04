@@ -2,6 +2,7 @@ import asyncio
 import discord
 import shutil
 from addons import utils
+from addons.checks import checks
 from discord.ext import commands
 from random import randrange, shuffle
 from collections import deque
@@ -215,7 +216,6 @@ class Voice:
     def __init__(self, bot):
         self.bot = bot
         self.voice_states = {}
-        self.checks = utils.PermissionChecks(bot)
         if not shutil.which('ffmpeg'):
             raise Exception('FFMPEG is not installed!')
         print('Addon "{}" loaded'.format(self.__class__.__name__))
@@ -259,12 +259,9 @@ class Voice:
         return True
 
     @commands.command(pass_context=True, no_pm=True)
+    @checks.is_access_allowed(required_level=1)
     async def summon(self, ctx):
         """Summons the bot to join your voice channel."""
-
-        if ctx.message.server.id != "132200767799951360":
-            if not await self.checks.check_perms(ctx.message, 1):
-                return False
 
         vc = ctx.message.author.voice_channel
 
@@ -353,12 +350,9 @@ class Voice:
         state.current_sound = None
 
     @commands.command(pass_context=True, name="play-u", no_pm=True)
+    @checks.is_access_allowed(required_level=1)
     async def play_u(self, ctx, *, song: str):
         """Plays youtube video. Usage: Kurisu, play-u <url>"""
-
-        if ctx.message.server.id != "132200767799951360":
-            if not await self.checks.check_perms(ctx.message, 1):
-                return
 
         state = self.get_voice_state(ctx.message.server)
 
@@ -388,12 +382,9 @@ class Voice:
         await state.skip(channel, voter)
 
     @commands.command(pass_context=True, no_pm=True)
+    @checks.is_access_allowed(required_level=1)
     async def stop(self, ctx):
         """Stops player and disconnects bot from channel"""
-
-        if ctx.message.server.id != "132200767799951360":
-            if not await self.checks.check_perms(ctx.message, 1):
-                return
 
         state = self.get_voice_state(ctx.message.server)
 
@@ -413,6 +404,7 @@ class Voice:
         await self.bot.say('Set the volume to {}%'.format(value))
 
     @commands.command(pass_context=True, no_pm=True)
+    @checks.is_access_allowed(required_level=1)
     async def playing(self, ctx):
         """Shows info about the currently played song."""
 
@@ -442,12 +434,9 @@ class Voice:
         await self.send("Current queue:\n1. {}\n{}".format(state.current.song, "\n".join(songs_queue)))
 
     @commands.command(pass_context=True, no_pm=True)
+    @checks.is_access_allowed(required_level=1)
     async def shuffle(self, ctx):
         """Shuffles songs queue."""
-
-        if ctx.message.server.id != "132200767799951360":
-            if not await self.checks.check_perms(ctx.message, 1):
-                return
 
         state = self.get_voice_state(ctx.message.server)
 

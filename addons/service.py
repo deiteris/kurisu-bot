@@ -2,6 +2,7 @@ import sqlite3
 import json
 import os, sys
 from addons import utils
+from addons.checks import checks
 from discord.ext import commands
 
 
@@ -13,7 +14,6 @@ class Service:
     # Construct
     def __init__(self, bot):
         self.bot = bot
-        self.checks = utils.PermissionChecks(bot)
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
     # Send message
@@ -21,12 +21,27 @@ class Service:
         await self.bot.say(msg)
 
     # Commands
-    @commands.command(pass_context=True)
-    async def reload(self, ctx):
-        """Reloads addons, db and config (owner only)"""
+    @commands.command()
+    @checks.is_access_allowed(required_level=9000)
+    async def load(self, name: str):
+        extension = "addons.{}".format(name)
+        try:
+            self.bot.load_extension(extension)
+            print("{} loaded".format(extension))
+        except Exception as e:
+            print('{} failed to load.\n{}: {}'.format(extension, type(e).__name__, e))
 
-        if not await self.checks.check_perms(ctx.message, 9000):
-            return
+    @commands.command()
+    @checks.is_access_allowed(required_level=9000)
+    async def unload(self, name: str):
+        extension = "addons.{}".format(name)
+        self.bot.unload_extension(extension)
+        print("{} unloaded".format(extension))
+
+    @commands.command()
+    @checks.is_access_allowed(required_level=9000)
+    async def reload(self):
+        """Reloads addons, db and config (owner only)"""
 
         # Reload configuration file so we (probably) can apply some settings on the fly
         # Might be useful
@@ -49,12 +64,10 @@ class Service:
                 print('{} failed to load.\n{}: {}'.format(extension['name'], type(e).__name__, e))
         await self.send("Reload complete!")
 
-    @commands.command(pass_context=True)
-    async def switch(self, ctx):
+    @commands.command()
+    @checks.is_access_allowed(required_level=9000)
+    async def switch(self):
         """Switches account between user and bot and shutting down bot (owner only)"""
-
-        if not await self.checks.check_perms(ctx.message, 9000):
-            return
 
         filename = 'config.json'
 
@@ -71,12 +84,10 @@ class Service:
 
         sys.exit()
 
-    @commands.command(pass_context=True)
-    async def shutdown(self, ctx):
+    @commands.command()
+    @checks.is_access_allowed(required_level=9000)
+    async def shutdown(self):
         """This kills the bot (owner only)"""
-
-        if not await self.checks.check_perms(ctx.message, 9000):
-            return
 
         await self.send("Shutting down...")
 
@@ -90,11 +101,9 @@ class Service:
             await self.send(msg)
 
     @roles.command(pass_context=True, name="init")
+    @checks.is_access_allowed(required_level=9000)
     async def roles_init(self, ctx):
         """Initializes roles (owner only)"""
-
-        if not await self.checks.check_perms(ctx.message, 9000):
-            return
 
         db = self.bot.db
 
@@ -118,11 +127,9 @@ class Service:
             await self.send("Failed to initialize roles!")
 
     @roles.command(pass_context=True, name="list")
+    @checks.is_access_allowed(required_level=3)
     async def roles_list(self, ctx):
         """Returns roles list for this server (Level 3)"""
-
-        if not await self.checks.check_perms(ctx.message, 3):
-            return
 
         cursor = self.bot.db.cursor()
 
@@ -142,11 +149,9 @@ class Service:
         await self.send(msg)
 
     @roles.command(pass_context=True, name="add")
+    @checks.is_access_allowed(required_level=3)
     async def roles_add(self, ctx, name: str, level: int):
         """Add role"""
-
-        if not await self.checks.check_perms(ctx.message, 3):
-            return
 
         cursor = self.bot.db.cursor()
 
@@ -168,11 +173,9 @@ class Service:
             await self.send("Failed to add new record.")
 
     @roles.command(pass_context=True, name="rm")
+    @checks.is_access_allowed(required_level=3)
     async def roles_remove(self, ctx, name: str):
         """Remove role"""
-
-        if not await self.checks.check_perms(ctx.message, 3):
-            return
 
         cursor = self.bot.db.cursor()
 
@@ -199,11 +202,9 @@ class Service:
             await self.send(msg)
 
     @db.command(name="init", pass_context=True)
+    @checks.is_access_allowed(required_level=9000)
     async def db_init(self, ctx):
         """Initializes db (required on first start)"""
-
-        if not await self.checks.check_perms(ctx.message, 9000):
-            return
 
         db = self.bot.db
 
@@ -252,12 +253,10 @@ class Service:
         except sqlite3.Error:
             await self.send("Failed to initialize database!")
 
-    @db.command(name="add", pass_context=True)
-    async def db_add(self, ctx, table: str, name: str, content: str):
+    @db.command(name="add")
+    @checks.is_access_allowed(required_level=3)
+    async def db_add(self, table: str, name: str, content: str):
         """Add record"""
-
-        if not await self.checks.check_perms(ctx.message, 3):
-            return
 
         db = self.bot.db
         if table == "sounds":
@@ -274,12 +273,10 @@ class Service:
         except sqlite3.Error:
             await self.send("Failed to add new record.")
 
-    @db.command(name="edit", pass_context=True)
-    async def db_edit(self, ctx, table: str, name: str, column: str, value: str):
+    @db.command(name="edit")
+    @checks.is_access_allowed(required_level=3)
+    async def db_edit(self, table: str, name: str, column: str, value: str):
         """Edit record"""
-
-        if not await self.checks.check_perms(ctx.message, 3):
-            return
 
         db = self.bot.db
         record = (name,)
@@ -290,12 +287,10 @@ class Service:
             db.commit()
             await self.send("This record has been successfully edited.")
 
-    @db.command(name="rm", pass_context=True)
-    async def db_remove(self, ctx, table: str, name: str):
+    @db.command(name="rm")
+    @checks.is_access_allowed(required_level=3)
+    async def db_remove(self, table: str, name: str):
         """Remove record"""
-
-        if not await self.checks.check_perms(ctx.message, 3):
-            return
 
         db = self.bot.db
         record = (name,)

@@ -71,16 +71,21 @@ class General:
         pins = await self.bot.pins_from(ctx.message.channel)
 
         if pins:
+            embeded = discord.Embed(color=0xEE8700)
+
             i = randrange(0, len(pins))
 
             if not pins[i].attachments:
                 pins[i].attachments = [{'url': ""}]
 
-            if pins[i].author.nick:
-                author = "{} ({})".format(pins[i].author, pins[i].author.nick)
-            else:
-                author = "{}".format(pins[i].author)
-            await self.send("{}: {} {}".format(author, pins[i].content, pins[i].attachments[0]['url']))
+            author = "{} ({})".format(pins[i].author, pins[i].author.nick) \
+                if pins[i].author.nick \
+                else "{}".format(pins[i].author)
+
+            embeded.add_field(name="Pin content:", value=pins[i].content, inline=False)
+            embeded.set_image(url=pins[i].attachments[0]['url'])
+            embeded.set_footer(text="— {}".format(author))
+            await self.bot.say(embed=embeded)
         else:
             await self.send("There are no pinned messages in this channel!")
 

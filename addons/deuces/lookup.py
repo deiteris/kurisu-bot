@@ -1,5 +1,5 @@
 import itertools
-from deuces.card import Card
+from addons.deuces.card import Card
 
 
 class LookupTable(object):

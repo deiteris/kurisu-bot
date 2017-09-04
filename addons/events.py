@@ -1,4 +1,5 @@
 import discord
+import addons.checks as checks
 from datetime import datetime
 from random import randint
 from discord.ext import commands
@@ -15,13 +16,17 @@ class Events:
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
     async def on_command_error(self, ecx, ctx):
+        channel = ctx.message.channel
+
         if isinstance(ecx, commands.errors.CommandNotFound):
-            await self.bot.send_message(ctx.message.channel, "I don't understand. Try `Kurisu, help`, baka!")
-        if isinstance(ecx, commands.errors.MissingRequiredArgument):
+            await self.bot.send_message(channel, "I don't understand. Try `Kurisu, help`, baka!")
+        elif isinstance(ecx, commands.errors.MissingRequiredArgument):
             formatter = commands.formatter.HelpFormatter()
-            await self.bot.send_message(ctx.message.channel,
+            await self.bot.send_message(channel,
                                         "You are missing required arguments. See the usage:\n{}".format(
                                             formatter.format_help_for(ctx, ctx.command)[0]))
+        elif isinstance(ecx, checks.errors.AccessDenied):
+            await self.bot.send_message(channel, "Access denied.")
 
     async def on_server_join(self, server):
         self.bot.access_roles.update({server.id: {}})

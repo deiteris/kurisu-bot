@@ -2,6 +2,7 @@ import discord
 import asyncio
 import time
 from addons import utils
+from addons.checks import checks
 from discord.ext import commands
 
 
@@ -14,7 +15,6 @@ class Mod:
     def __init__(self, bot):
         self.bot = bot
         self.timers_storage = bot.unmute_timers
-        self.checks = utils.PermissionChecks(bot)
         print('Addon "{}" loaded'.format(self.__class__.__name__))
 
         # Open cursor and check for mutes in database
@@ -117,14 +117,11 @@ class Mod:
 
     # Commands
     @commands.command(pass_context=True, name="mute-t")
+    @checks.is_access_allowed(required_level=2)
     async def mute_t(self, ctx, user: str, seconds: int):
         """Mute for specific time"""
 
-        msg = ctx.message
         server = ctx.message.server
-
-        if not await self.checks.check_perms(msg, 2):
-            return
 
         # Check for permissions before proceed
         bot = server.get_member(self.bot.user.id)
@@ -173,14 +170,11 @@ class Mod:
         await self.send("Member {} has been muted for {}".format(member.name, mute_time))
 
     @commands.command(pass_context=True)
+    @checks.is_access_allowed(required_level=2)
     async def mute(self, ctx, user: str):
         """Permanent mute command"""
 
-        msg = ctx.message
         server = ctx.message.server
-
-        if not await self.checks.check_perms(msg, 2):
-            return
 
         # Check for permission before proceed
         bot = server.get_member(self.bot.user.id)
@@ -209,14 +203,11 @@ class Mod:
         await self.send("Member {} has been muted permanently".format(member.name))
 
     @commands.command(pass_context=True)
+    @checks.is_access_allowed(required_level=2)
     async def unmute(self, ctx, user: str):
         """Unmute command"""
 
-        msg = ctx.message
         server = ctx.message.server
-
-        if not await self.checks.check_perms(msg, 2):
-            return
 
         # Check for permission before proceed
         bot = server.get_member(self.bot.user.id)

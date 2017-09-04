@@ -1,12 +1,13 @@
 import sqlite3
 
+
 # These methods are static since they're used in different addons
 async def db_check(bot, msg, cursor, table: str):
     """
     This function is coroutine.
-    
+
     Checks if table exists.
-    
+
     :param bot: Bot instance
     :param msg: Message
     :param cursor: Database cursor
@@ -27,12 +28,12 @@ async def db_check(bot, msg, cursor, table: str):
 async def get_members(bot, msg, name: str):
     """
     This function is coroutine.
-    
+
     Gets server member/members.
     Returns array of members in "Username#Discriminator" format/
     First member of this array (members[0]) should be passed to server.get_member_named() method.
     Members array can be used for similar results outputting.
-    
+
     :param bot: Bot instance
     :param msg: Message
     :param name: Member name
@@ -92,49 +93,11 @@ async def get_members(bot, msg, name: str):
         else:
             if len(members) > 4:
                 await bot.say("There are too many results. Please be more specific.\n\n"
-                                   "Here is a list with suggestions:\n"
-                                   "{}".format("\n".join(members)))
+                              "Here is a list with suggestions:\n"
+                              "{}".format("\n".join(members)))
                 return None
             else:
                 return members
-
-
-class PermissionChecks:
-
-    def __init__(self, bot):
-        self.bot = bot
-
-    async def check_perms(self, msg, required_level: int):
-        """
-        This function is coroutine.
-        
-        Checks if user has permission to use command and returns boolean.
-        Owner which is provided in config is a bot superuser 
-        since no one will be having access to special commands except owner by default.
-        
-        Bot access system uses levels. If role in database record is greater or equal to required level - access 
-        will be granted.
-
-        Required_level explicitly passed to check_perms in command (currently manually).
-
-        Access levels for commands are in progress...
-
-        :param msg: Message
-        :param required_level: Required role level
-        :return: Bool
-        """
-
-        if msg.author.id == self.bot.config['owner']:
-            return True
-
-        for role in msg.author.roles:
-            # NOTE: Roles can have similar names. Not sure if it is bad.
-            if role.name.lower() in self.bot.access_roles[msg.server.id] \
-                    and self.bot.access_roles[msg.server.id][role.name.lower()] >= required_level:
-                return True
-
-        await self.bot.say("Access denied.")
-        return False
 
 
 # Dummy cog
