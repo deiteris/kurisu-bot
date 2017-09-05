@@ -4,6 +4,7 @@ import os, sys
 from addons import utils
 from addons.checks import checks
 from discord.ext import commands
+from discord import utils as discord
 
 
 class Service:
@@ -100,32 +101,6 @@ class Service:
             msg = "Have you ever tried `Kurisu, help roles` command? I suggest you do it now..."
             await self.send(msg)
 
-    @roles.command(pass_context=True, name="init")
-    @checks.is_access_allowed(required_level=9000)
-    async def roles_init(self, ctx):
-        """Initializes roles (owner only)"""
-
-        db = self.bot.db
-
-        try:
-            db.execute('CREATE TABLE IF NOT EXISTS roles (id integer NOT NULL primary key AUTOINCREMENT, role varchar, level int, serverid varchar)')
-            roles = [
-                ('commander', 3, '132200767799951360'), ('moderator', 2, '132200767799951360')
-            ]
-            db.executemany('INSERT INTO roles(role, level, serverid) VALUES (?,?,?)', roles)
-
-            db.commit()
-
-            # Put roles in storage
-            # role[0] - role name
-            # role[1] - access level
-            for role in roles:
-                self.bot.access_roles[ctx.message.server.id].update({role[0]: role[1]})
-
-            await self.send("Roles have been initialized!")
-        except sqlite3.Error:
-            await self.send("Failed to initialize roles!")
-
     @roles.command(pass_context=True, name="list")
     @checks.is_access_allowed(required_level=3)
     async def roles_list(self, ctx):
@@ -142,7 +117,7 @@ class Service:
         cursor.close()
         if data:
             for row in data:
-                msg += "ID: {} | Role name: {} | Level: {}\n".format(row[0], row[1], row[2])
+                msg += "ID: {} | Role name: {} | Level: {}\n".format(row[1], row[2], row[3])
         else:
             msg += "Empty"
         msg += "```"
@@ -158,16 +133,22 @@ class Service:
         if not await utils.db_check(self.bot, ctx.message, cursor, "roles"):
             return
 
+        role = discord.get(ctx.message.server.roles, name=name)
+
+        if role is None:
+            print("Role wasn't found.")
+            return
+
         db = self.bot.db
 
-        record = (name.lower(), level, ctx.message.server.id)
-        query = 'INSERT INTO roles(role, level, serverid) VALUES (?,?,?)'
+        record = (role.id, role.name.lower(), level, ctx.message.server.id)
+        query = 'INSERT INTO roles(role_id, role, level, serverid) VALUES (?,?,?,?)'
 
         try:
             db.execute(query, record)
             db.commit()
             # Add role to storage
-            self.bot.access_roles[ctx.message.server.id].update({name.lower(): level})
+            self.bot.access_roles[ctx.message.server.id].update({role.id: level})
             await self.send("Your record has been successfully added.")
         except sqlite3.Error:
             await self.send("Failed to add new record.")
@@ -182,16 +163,22 @@ class Service:
         if not await utils.db_check(self.bot, ctx, cursor, "roles"):
             return
 
+        role = discord.get(ctx.message.server.roles, name=name)
+
+        if role is None:
+            print("Role wasn't found.")
+            return
+
         db = self.bot.db
 
-        record = (name.lower(), ctx.message.server.id)
+        record = (role.name.lower(), ctx.message.server.id)
         query = 'DELETE FROM roles WHERE role=? AND serverid=?'
         if db.execute(query, record).rowcount == 0:
             await self.send("Failed to remove this record.")
         else:
             db.commit()
             # Remove role from storage
-            self.bot.access_roles[ctx.message.server.id].pop(name.lower())
+            self.bot.access_roles[ctx.message.server.id].pop(role.id)
             await self.send("This record has been successfully removed.")
 
     @commands.group(pass_context=True)

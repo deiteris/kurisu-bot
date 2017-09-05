@@ -82,8 +82,10 @@ class General:
                 if pins[i].author.nick \
                 else "{}".format(pins[i].author)
 
-            embeded.add_field(name="Pin content:", value=pins[i].content, inline=False)
-            embeded.set_image(url=pins[i].attachments[0]['url'])
+            if pins[i].content:
+                embeded.add_field(name="Pin message:", value=pins[i].content, inline=False)
+
+            embeded.set_image(url=str(pins[i].attachments[0]['url']))
             embeded.set_footer(text="— {}".format(author))
             await self.bot.say(embed=embeded)
         else:

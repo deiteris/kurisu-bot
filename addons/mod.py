@@ -15,12 +15,22 @@ class Mod:
     def __init__(self, bot):
         self.bot = bot
         self.timers_storage = bot.unmute_timers
-        print('Addon "{}" loaded'.format(self.__class__.__name__))
 
         # Open cursor and check for mutes in database
         cursor = self.bot.db.cursor()
 
         # Check for those members, who need to be unmuted now
+        self.members_to_unmute(cursor)
+
+        # Check for those members, who need to be unmuted later
+        self.members_to_update_mute(cursor)
+
+        # Close cursor
+        cursor.close()
+
+        print('Addon "{}" loaded'.format(self.__class__.__name__))
+
+    def members_to_unmute(self, cursor):
         cursor.execute("SELECT * FROM mutes WHERE mute_time < strftime('%s','now')")
         to_unmute_now_data = cursor.fetchall()
         if to_unmute_now_data:
@@ -32,7 +42,7 @@ class Mod:
                 # row[2] - Member name
                 # row[3] - Mute time
                 # row[4] - server id
-                for server in bot.servers:
+                for server in self.bot.servers:
                     if server.id == row[4]:
                         member = server.get_member(row[1])
                         # Since we can't use async in __init__ we we'll create Future task.
@@ -46,7 +56,7 @@ class Mod:
             self.bot.db.execute("DELETE FROM mutes WHERE mute_time < strftime('%s','now')")
             self.bot.db.commit()
 
-        # Check for those members, who need to be unmuted later
+    def members_to_update_mute(self, cursor):
         cursor.execute("SELECT * FROM mutes")
         to_unmute_later_data = cursor.fetchall()
         if to_unmute_later_data:
@@ -57,7 +67,7 @@ class Mod:
                 # row[2] - Member name
                 # row[3] - Mute time
                 # row[4] - server id
-                for server in bot.servers:
+                for server in self.bot.servers:
                     if server.id == row[4]:
                         member = server.get_member(row[1])
                         seconds_to_unmute = row[3] - time.time()
@@ -66,7 +76,6 @@ class Mod:
                             print("Setting up timers...")
                             unmute_timer = self.bot.loop.create_task(self.unmute_timer(server, member, seconds_to_unmute))
                             self.timers_storage[server.id].update({member.id: unmute_timer})
-        cursor.close()
 
     # Send message
     async def send(self, msg):
@@ -80,7 +89,7 @@ class Mod:
         try:
             await self.bot.server_voice_state(member, mute=False if access is None else True)
         except discord.Forbidden as e:
-            print("Failed to mute user. Reason: {}".format(type(e).__name__))
+            print("Failed to set user's voice state. Reason: {}".format(type(e).__name__))
 
         print("Setting permissions for {} to: {}".format(member.name, str(access)))
 
@@ -105,7 +114,7 @@ class Mod:
             print("Member {} has been unmuted.".format(member.name))
 
         except asyncio.CancelledError:
-            self.remove_muted_member(member, server)
+            pass
 
     def remove_muted_member(self, member, server):
         db = self.bot.db
@@ -116,22 +125,23 @@ class Mod:
         del self.timers_storage[server.id][member.id]
 
     # Commands
-    @commands.command(pass_context=True, name="mute-t")
+    @commands.command(pass_context=True)
     @checks.is_access_allowed(required_level=2)
-    async def mute_t(self, ctx, user: str, seconds: int):
+    async def mute(self, ctx, user: str, seconds=0):
         """Mute for specific time"""
+
+        if seconds < 0:
+            await self.bot.say("Invalid amount of time.")
+            return
 
         server = ctx.message.server
 
         # Check for permissions before proceed
-        bot = server.get_member(self.bot.user.id)
-        bot_permissions = bot.server_permissions
-
-        if not bot_permissions.manage_roles:
-            await self.send("I'm not able to manage permissions without `Manage Roles` permission.")
+        if not commands.bot_has_permissions(manage_roles=True):
+            await self.bot.say("I'm not able to manage permissions without `Manage Roles` permission.")
             return
-        elif not bot_permissions.mute_members:
-            await self.send("I'm not able to mute voice without `Mute Members` permission.")
+        elif not not commands.bot_has_permissions(mute_members=True):
+            await self.bot.say("I'm not able to mute voice without `Mute Members` permission.")
 
         members = await utils.get_members(self.bot, ctx.message, user)
 
@@ -147,60 +157,30 @@ class Mod:
         # Set permissions
         await self.set_permissions(server, member, False)
 
-        # Set unmute timer
-        unmute_timer = self.bot.loop.create_task(self.unmute_timer(server, member, seconds))
-        self.timers_storage[server.id].update({member.id: unmute_timer})
+        if seconds > 0:
+            # Set unmute timer
+            unmute_timer = self.bot.loop.create_task(self.unmute_timer(server, member, seconds))
+            self.timers_storage[server.id].update({member.id: unmute_timer})
 
-        # Write muted member to database
-        db = self.bot.db
-        values = (member.id, member.name, seconds, server.id)
-        db.execute("INSERT INTO mutes(member_id, member_name, mute_time, server_id) VALUES (?,?,strftime('%s','now') + ?,?)", values)
-        db.commit()
+            # Write muted member to database
+            db = self.bot.db
+            values = (member.id, member.name, seconds, server.id)
+            db.execute("INSERT INTO mutes(member_id, member_name, mute_time, server_id) VALUES (?,?,strftime('%s','now') + ?,?)", values)
+            db.commit()
 
-        def convert_time(secs):
-            return {
-                1 <= secs < 60: '{} second(s)'.format(secs),
-                60 <= secs < 3600: '{0[0]} minute(s) {0[1]} second(s)'.format(divmod(secs, 60)),
-                3600 <= secs < 86400: '{0[0]} hour(s) {0[1]} minute(s)'.format(divmod(secs, 60 * 60)),
-                86400 <= secs < 604800: '{0[0]} day(s) {0[1]} hour(s)'.format(divmod(secs, 60 * 60 * 24)),
-            }[True]
+            def convert_time(secs):
+                return {
+                    1 <= secs < 60: '{} second(s)'.format(secs),
+                    60 <= secs < 3600: '{0[0]} minute(s) {0[1]} second(s)'.format(divmod(secs, 60)),
+                    3600 <= secs < 86400: '{0[0]} hour(s) {0[1]} minute(s)'.format(divmod(secs, 60 * 60)),
+                    86400 <= secs < 604800: '{0[0]} day(s) {0[1]} hour(s)'.format(divmod(secs, 60 * 60 * 24)),
+                }[True]
 
-        mute_time = convert_time(seconds)
+            mute_time = convert_time(seconds)
 
-        await self.send("Member {} has been muted for {}".format(member.name, mute_time))
-
-    @commands.command(pass_context=True)
-    @checks.is_access_allowed(required_level=2)
-    async def mute(self, ctx, user: str):
-        """Permanent mute command"""
-
-        server = ctx.message.server
-
-        # Check for permission before proceed
-        bot = server.get_member(self.bot.user.id)
-        bot_permissions = bot.server_permissions
-
-        if not bot_permissions.manage_roles:
-            await self.send("I'm not able to manage permissions without `Manage Roles` permission.")
-            return
-        elif not bot_permissions.mute_members:
-            await self.send("I'm not able to mute voice without `Mute Members` permission.")
-
-        members = await utils.get_members(self.bot, ctx.message, user)
-
-        if members is None:
-            return
-
-        member = ctx.message.server.get_member_named(members[0])
-
-        # If member is temporarily muted - just cancel current timer
-        if member.id in self.timers_storage[server.id]:
-            self.timers_storage[server.id][member.id].cancel()
+            await self.send("Member {} has been muted for {}".format(member.name, mute_time))
         else:
-            # Set permissions
-            await self.set_permissions(server, member, False)
-
-        await self.send("Member {} has been muted permanently".format(member.name))
+            await self.send("Member {} has been muted permanently".format(member.name))
 
     @commands.command(pass_context=True)
     @checks.is_access_allowed(required_level=2)
@@ -209,13 +189,12 @@ class Mod:
 
         server = ctx.message.server
 
-        # Check for permission before proceed
-        bot = server.get_member(self.bot.user.id)
-        bot_permissions = bot.server_permissions
-
-        if not bot_permissions.manage_roles:
-            await self.send("I'm not able to manage permissions without `Manage Roles` permission.")
+        # Check for permissions before proceed
+        if not commands.bot_has_permissions(manage_roles=True):
+            await self.bot.say("I'm not able to manage permissions without `Manage Roles` permission.")
             return
+        elif not not commands.bot_has_permissions(mute_members=True):
+            await self.bot.say("I'm not able to mute voice without `Mute Members` permission.")
 
         members = await utils.get_members(self.bot, ctx.message, user)
 
@@ -229,6 +208,7 @@ class Mod:
 
         # Remove mute task for a member and remove him from database
         if member.id in self.timers_storage[server.id]:
+            self.remove_muted_member(member, server)
             self.timers_storage[server.id][member.id].cancel()
 
         await self.send("Member {} has been unmuted by command.".format(member.name))

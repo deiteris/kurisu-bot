@@ -30,10 +30,11 @@ def check_perms(ctx, required_level: int):
     if msg.author.id == bot.config['owner']:
         return True
 
-    for role in msg.author.roles:
-        # NOTE: Roles can have similar names. Not sure if it is bad.
-        if role.name.lower() in bot.access_roles[msg.server.id] \
-                and bot.access_roles[msg.server.id][role.name.lower()] >= required_level:
-            return True
+    if msg.author.roles:
+        for role in msg.author.roles:
+            # NOTE: Roles can have similar names. Not sure if it is bad.
+            if role.id in bot.access_roles[msg.server.id] \
+                    and bot.access_roles[msg.server.id][role.id] >= required_level:
+                return True
 
     raise errors.AccessDenied

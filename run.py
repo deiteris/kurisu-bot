@@ -38,7 +38,7 @@ with open('config.json') as data:
 bot.db = sqlite3.connect('main.db')
 # Create tables for muted members and access roles. Necessary for basic functionality.
 bot.db.execute('CREATE TABLE IF NOT EXISTS mutes (id integer NOT NULL primary key AUTOINCREMENT, member_id varchar, member_name varchar, mute_time integer, server_id varchar)')
-bot.db.execute('CREATE TABLE IF NOT EXISTS roles (id integer NOT NULL primary key AUTOINCREMENT, role varchar, level int, serverid varchar)')
+bot.db.execute('CREATE TABLE IF NOT EXISTS roles (id integer NOT NULL primary key AUTOINCREMENT, role_id varchar, role varchar, level int, serverid varchar)')
 bot.db.execute('CREATE TABLE IF NOT EXISTS poker_players (id integer NOT NULL primary key AUTOINCREMENT, user_id varchar, name varchar, balance int, win_count int, next_claim_time integer)')
 bot.db.commit()
 
@@ -89,7 +89,7 @@ async def on_ready():
                 # row[1] - role name
                 # row[2] - role level
                 # row[3] - server id
-                bot.access_roles[server.id].update({row[1]: row[2]})
+                bot.access_roles[server.id].update({row[1]: row[3]})
 
         print("Connected to {} with {:,} members!".format(server.name, server.member_count))
 
