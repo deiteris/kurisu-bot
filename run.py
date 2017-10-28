@@ -107,6 +107,6 @@ async def on_ready():
 
 # Set bot type in config. Will use token by default.
 if bot.config['type'] == "user":
-    bot.run(bot.config['email'], bot.config['password'])
+    bot.run(bot.config['user_token'], bot=False)
 else:
     bot.run(bot.config['token'])

@@ -5,7 +5,6 @@ import wolframalpha
 import discord
 import string
 import hashlib
-from psutil import virtual_memory
 from addons import utils
 from datetime import datetime
 from discord.ext import commands
@@ -38,27 +37,6 @@ class General:
         await self.send(msg)
 
     @commands.command()
-    async def mem(self):
-        """Shows server memory usage"""
-        ram = virtual_memory()
-
-        def convert_size(size, precision=2):
-            suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
-            suffix_index = 0
-            while size > 1024 and suffix_index < 4:
-                suffix_index += 1  # Increment the index of the suffix
-                size = size / 1024.0  # Apply the division
-            return "%.*f%s" % (precision, size, suffixes[suffix_index])
-
-        msg = "```\nRAM\n---------\nTotal: {}\nUsed: {} ({}%)\nFree: {}\nAvailable: {}\n```".format(convert_size(ram.total),
-                                                                                              convert_size(ram.used),
-                                                                                              ram.percent,
-                                                                                              convert_size(ram.free),
-                                                                                              convert_size(ram.available))
-
-        await self.send(msg)
-
-    @commands.command()
     async def uptime(self):
         """Shows bot uptime"""
         uptime = datetime.today() - self.bot.start_time
@@ -70,23 +48,41 @@ class General:
         """Shows random pinned message"""
         pins = await self.bot.pins_from(ctx.message.channel)
 
+        def randomize_color():
+            chars = string.digits + "ABCDEF"
+            color = "".join(choice(chars) for _ in range(6))
+            return int('0x{}'.format(color), 16)
+
         if pins:
-            embeded = discord.Embed(color=0xEE8700)
-
             i = randrange(0, len(pins))
+            pin = pins[i]
 
-            if not pins[i].attachments:
-                pins[i].attachments = [{'url': ""}]
+            embeded = discord.Embed(color=randomize_color(), description=pin.content if pin.content else "")
 
-            author = "{} ({})".format(pins[i].author, pins[i].author.nick) \
-                if pins[i].author.nick \
-                else "{}".format(pins[i].author)
+            if not pin.attachments:
+                pin.attachments = [{'url': ""}]
 
-            if pins[i].content:
-                embeded.add_field(name="Pin message:", value=pins[i].content, inline=False)
+            try:
+                author = "{} ({})".format(pin.author, pin.author.nick) \
+                    if pin.author.nick \
+                    else "{}".format(pin.author)
+            except AttributeError:
+                author = "{}".format(pin.author)
 
-            embeded.set_image(url=str(pins[i].attachments[0]['url']))
-            embeded.set_footer(text="— {}".format(author))
+            embeded.set_author(name="{}".format(author), icon_url=pin.author.avatar_url)
+
+            attachment = ""
+            if pin.attachments[0]['url']:
+                file_extension = pin.attachments[0]['filename'].split(".")[-1]
+                if file_extension != "jpg" and file_extension != "jpeg" and file_extension != "png":
+                    attachment = "{}".format(pin.attachments[0]['url'])
+                else:
+                    embeded.set_image(url=pin.attachments[0]['url'])
+
+            if attachment:
+                embeded.add_field(name="Attachment:", value=attachment)
+
+            embeded.set_footer(text=pin.timestamp.strftime("%d %B %Y at %H:%M"))
             await self.bot.say(embed=embeded)
         else:
             await self.send("There are no pinned messages in this channel!")
@@ -94,16 +90,10 @@ class General:
     @commands.command(pass_context=True, no_pm=False)
     async def passgen(self, ctx, length: int):
         """Password generator"""
-        letters = string.ascii_letters
-        digits = string.digits
-        chars = letters + digits + "!@#$%^&()\/|"
-        password = "Your password: "
+        chars = string.ascii_letters + string.digits + "!@#$%^&()\/|"
+        password = "".join(choice(chars) for _ in range(length))
 
-        i = 0
-        while i < length:
-            i += 1
-            password += "".join(choice(chars))
-        await self.bot.send_message(ctx.message.author, password)
+        await self.bot.send_message(ctx.message.author, "Your password: {}".format(password))
 
     @commands.command()
     async def google(self, *, query: str):
