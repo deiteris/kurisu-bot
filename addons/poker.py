@@ -9,33 +9,33 @@ from addons import utils
 from addons import deuces
 from operator import attrgetter
 from discord.ext import commands
-from enum import Enum, auto
+from enum import Enum
 from collections import deque
 
 
 class GameStatus(Enum):
-    PENDING = auto()
-    PREFLOP = auto()
-    FLOP = auto()
-    TURN = auto()
-    RIVER = auto()
-    ENDGAME = auto()
+    PENDING = 0
+    PREFLOP = 1
+    FLOP = 2
+    TURN = 3
+    RIVER = 4
+    ENDGAME = 5
 
     def next(self):
         return GameStatus(self.value + 1)
 
 
 class PlayerStatus(Enum):
-    WAITING = auto()
+    WAITING = 0
     # For debug purposes
-    BLINDED = auto()
-    CALLED = auto()
-    CHECKED = auto()
-    BET = auto()
-    RAISED = auto()
-    ALLIN = auto()
-    THONKING = auto()
-    FOLDED = auto()
+    BLINDED = 1
+    CALLED = 2
+    CHECKED = 3
+    BET = 4
+    RAISED = 5
+    ALLIN = 6
+    THONKING = 7
+    FOLDED = 8
 
 
 class Dealer:
@@ -986,7 +986,7 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not self.is_action_allowed(player, game):
+        if not await self.is_action_allowed(player, game):
             return
 
         await game.make_check(player)
@@ -1026,7 +1026,7 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not self.is_action_allowed(player, game):
+        if not await self.is_action_allowed(player, game):
             return
 
         await game.make_call(player)
@@ -1053,7 +1053,7 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not self.is_action_allowed(player, game):
+        if not await self.is_action_allowed(player, game):
             return
 
         await game.make_bet(player, amount)
@@ -1080,7 +1080,7 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not self.is_action_allowed(player, game):
+        if not await self.is_action_allowed(player, game):
             return
 
         await game.make_raise(player, amount)
@@ -1103,7 +1103,7 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not self.is_action_allowed(player, game):
+        if not await self.is_action_allowed(player, game):
             return
 
         await game.make_all_in(player)
@@ -1126,7 +1126,7 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not self.is_action_allowed(player, game):
+        if not await self.is_action_allowed(player, game):
             return
 
         await game.make_fold(player)
