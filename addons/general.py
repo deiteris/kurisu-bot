@@ -8,7 +8,7 @@ import hashlib
 from addons import utils
 from datetime import datetime
 from discord.ext import commands
-from random import randrange, choice
+from random import choice
 
 
 class General:
@@ -54,8 +54,7 @@ class General:
             return int('0x{}'.format(color), 16)
 
         if pins:
-            i = randrange(0, len(pins))
-            pin = pins[i]
+            pin = choice(pins)
 
             embeded = discord.Embed(color=randomize_color(), description=pin.content if pin.content else "")
 
@@ -137,7 +136,7 @@ class General:
     @commands.command(pass_context=True)
     @commands.cooldown(1, 3, commands.BucketType.channel)
     async def react(self, ctx, target: str, *, word: str):
-        """React to message with regional indicators"""
+        """React to message with regional indicators. Use message id or 'me' as a target"""
 
         # Emojis dictionary
         emojis = {
@@ -281,10 +280,6 @@ class General:
         embeded.add_field(name="Nickname:", value=member.nick, inline=True)
         embeded.add_field(name="ID:", value=member.id, inline=True)
         embeded.add_field(name="Shared servers:", value=server_counter, inline=False)
-        if type(self.bot.member_last_seen[member.id]) is discord.Status:
-            embeded.add_field(name="Current status:", value=self.bot.member_last_seen[member.id], inline=False)
-        else:
-            embeded.add_field(name="Last seen:", value=self.bot.member_last_seen[member.id], inline=False)
         embeded.add_field(name="Created account:", value=created_at, inline=False)
         embeded.add_field(name="Joined server:", value=joined_at, inline=False)
 

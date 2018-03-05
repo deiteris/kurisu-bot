@@ -957,17 +957,6 @@ class Poker:
         await game.get_next_player()
 
     # Game actions
-    async def is_action_allowed(self, player, game):
-        if not player:
-            await self.bot.say("You're not participating in this game!")
-            return
-        elif game.status is GameStatus.PENDING:
-            await self.bot.say("Game is not running.")
-            return
-        elif player.status is not PlayerStatus.THONKING:
-            await self.bot.say("You can't make any actions!")
-            return
-
     @commands.command(pass_context=True, no_pm=True)
     async def check(self, ctx):
         """
@@ -986,7 +975,14 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not await self.is_action_allowed(player, game):
+        if not player:
+            await self.bot.say("You're not participating in this game!")
+            return
+        elif game.status is GameStatus.PENDING:
+            await self.bot.say("Game is not running.")
+            return
+        elif player.status is not PlayerStatus.THONKING:
+            await self.bot.say("You can't make any actions!")
             return
 
         await game.make_check(player)
@@ -1026,7 +1022,14 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not await self.is_action_allowed(player, game):
+        if not player:
+            await self.bot.say("You're not participating in this game!")
+            return
+        elif game.status is GameStatus.PENDING:
+            await self.bot.say("Game is not running.")
+            return
+        elif player.status is not PlayerStatus.THONKING:
+            await self.bot.say("You can't make any actions!")
             return
 
         await game.make_call(player)
@@ -1053,7 +1056,14 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not await self.is_action_allowed(player, game):
+        if not player:
+            await self.bot.say("You're not participating in this game!")
+            return
+        elif game.status is GameStatus.PENDING:
+            await self.bot.say("Game is not running.")
+            return
+        elif player.status is not PlayerStatus.THONKING:
+            await self.bot.say("You can't make any actions!")
             return
 
         await game.make_bet(player, amount)
@@ -1080,7 +1090,14 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not await self.is_action_allowed(player, game):
+        if not player:
+            await self.bot.say("You're not participating in this game!")
+            return
+        elif game.status is GameStatus.PENDING:
+            await self.bot.say("Game is not running.")
+            return
+        elif player.status is not PlayerStatus.THONKING:
+            await self.bot.say("You can't make any actions!")
             return
 
         await game.make_raise(player, amount)
@@ -1103,7 +1120,14 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not await self.is_action_allowed(player, game):
+        if not player:
+            await self.bot.say("You're not participating in this game!")
+            return
+        elif game.status is GameStatus.PENDING:
+            await self.bot.say("Game is not running.")
+            return
+        elif player.status is not PlayerStatus.THONKING:
+            await self.bot.say("You can't make any actions!")
             return
 
         await game.make_all_in(player)
@@ -1126,7 +1150,14 @@ class Poker:
 
         player = game.get_player(author)
 
-        if not await self.is_action_allowed(player, game):
+        if not player:
+            await self.bot.say("You're not participating in this game!")
+            return
+        elif game.status is GameStatus.PENDING:
+            await self.bot.say("Game is not running.")
+            return
+        elif player.status is not PlayerStatus.THONKING:
+            await self.bot.say("You can't make any actions!")
             return
 
         await game.make_fold(player)

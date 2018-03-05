@@ -4,7 +4,8 @@
 	"type": "bot",
 	
 	"__credentials_comment": "Optional: Provide email and password credentials if you want to run bot on user account.",
-	"user_token": "Mjk0NDE4NDEzMzc0MTQ0NTEz.DMTrYg.sr2Yt6JhEvzOgC-MmaJxHDwdrLY",
+	"email": "",
+	"password": "",
 	
 	"__token_comment": "Provide token if you want to run bot on bot account.",
 	"token": "",
@@ -34,9 +35,6 @@
 		},
 		{
 			"name": "addons.mod"
-		},
-		{
-			"name": "addons.poker"
 		},
 		{
 			"name": "addons.utils"

@@ -32,36 +32,6 @@ class Events:
         self.bot.access_roles.update({server.id: {}})
         self.bot.unmute_timers.update({server.id: {}})
         self.bot.servers_settings.update({server.id: {'wiki_lang': "en"}})
-        for member in server.members:
-            if member.id not in self.bot.member_last_seen:
-                if member.status is not discord.Status.offline:
-                    self.bot.member_last_seen.update({member.id: member.status})
-                else:
-                    self.bot.member_last_seen.update({member.id: datetime.today().strftime('%d %B %Y at %H:%M UTC+3')})
-
-    async def on_member_join(self, member):
-
-        if member.id not in self.bot.member_last_seen:
-            self.bot.member_last_seen.update({member.id: member.status})
-
-        steins_gate = "213420119034953729"
-
-        if member.server.id == steins_gate:
-            RCgamer77 = "RCgamer77#0099"
-            embeded = discord.Embed(title="A new member has come to Steins;Gate church!", description='Member Info',
-                                    color=0xEE8700)
-            embeded.set_thumbnail(url=member.avatar_url)
-            embeded.add_field(name="Name:", value=member.name, inline=True)
-            embeded.add_field(name="ID:", value=member.id, inline=True)
-            embeded.add_field(name="Created account:", value=member.created_at.strftime('%d-%m-%Y %H:%M:%S'), inline=True)
-            embeded.set_image(url="https://i.imgur.com/Wj57Pe2.jpg")
-            await self.bot.send_message(member.server.get_member_named(RCgamer77), embed=embeded)
-
-    async def on_member_update(self, before, after):
-        if after.status is discord.Status.offline:
-            self.bot.member_last_seen.update({after.id: datetime.today().strftime('%d %B %Y at %H:%M UTC+3')})
-        else:
-            self.bot.member_last_seen.update({after.id: after.status})
 
     async def on_message(self, msg):
 

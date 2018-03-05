@@ -1,10 +1,11 @@
 import asyncio
 import discord
 import shutil
+import youtube_dl
 from addons import utils
 from addons.checks import checks
 from discord.ext import commands
-from random import randrange, shuffle
+from random import choice, shuffle
 from collections import deque
 
 if not discord.opus.is_loaded():
@@ -29,6 +30,8 @@ class Song:
         self.task = None
 
     def __str__(self):
+        if self.uploader is None:
+            self.uploader = self.requester.display_name
         fmt = '*{0}* uploaded by {1} and requested by {2.display_name}'
         if self.is_live:
             fmt = fmt + ' [live stream]'
@@ -47,7 +50,7 @@ class Song:
             while self.current_position <= self.duration:
                 self.current_position += 1
                 await asyncio.sleep(1)
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, TypeError):
             pass
 
 
@@ -61,12 +64,13 @@ class QueueItem:
 
 class VoiceState:
 
-    def __init__(self, bot, voice_module):
+    def __init__(self, bot, server, voice_module):
         self.voice_client = None
         self.bot = bot
         # Voice_module is Voice object.
         # Used for voice state removal.
         self.voice_module = voice_module
+        self.server = server
         self.skip_votes = set()  # a set of user_ids that voted
         self.queue = deque()
         self.current = None
@@ -78,8 +82,8 @@ class VoiceState:
     def do_skip(self):
         self.skip_votes.clear()
         if self.is_playing():
-            self.current.player.stop()
             self.current.song.stop_counter()
+            self.current.player.stop()
 
     async def skip(self, channel, voter):
 
@@ -101,34 +105,72 @@ class VoiceState:
             await self.bot.send_message(channel, 'You have already voted to skip this song.')
 
     async def play(self, channel, requester, song):
+
+        def queue_song(data):
+            if data.get('formats'):
+                url = data['formats'][0]['url']
+            else:
+                url = data['url']
+
+            return QueueItem(channel, Song(data.get('title'), requester, url, data.get('uploader'), data.get('is_live'), data.get('duration')))
+
+        ytdl_meta_opts = {
+            # https://github.com/rg3/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L160
+            'format': 'webm[abr>0]/bestaudio/best[height<=480]',
+            'prefer_ffmpeg': True,
+            'default_search': 'auto',
+            # Probably should lower memory consumption.
+            'simulate': True,
+            # Speeds up loading by 100x (almost) without any problems
+            'extract_flat': True if 'playlist?' in song or 'watch?' in song else False,
+            # Override default 600 seconds, just in case
+            'socket_timeout': 30,
+            # Maybe will help, maybe not ¯\_(ツ)_/¯
+            'source_address': '0.0.0.0',
+            'nocheckcertificate': True,
+            'youtube_include_dash_manifest': False,
+            # Suppress output
+            'quiet': True,
+        }
+
         try:
-            ytdl_meta_opts = {
-                'default_search': 'auto',
-                # Probably should lower memory consumption.
-                # https://github.com/rg3/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L158
-                'simulate': True,
-                'quiet': True,
-            }
-            player = await self.voice_client.create_ytdl_player(song, ytdl_options=ytdl_meta_opts)
+            with youtube_dl.YoutubeDL(ytdl_meta_opts) as ytdl:
+
+                video = ytdl.extract_info(song, download=False)
+
+                if video.get('entries'):
+
+                    for entry in video['entries']:
+
+                        if not entry or entry.get('is_live'):
+                            continue
+
+                        self.queue.append(queue_song(entry))
+
+                    await self.voice_module.send('Enqueued {} item(s).'.format(len(self.queue)))
+                else:
+                    if not video:
+                        raise Exception('Nothing was found or something went wrong!')
+                    elif video.get('is_live'):
+                        raise NotImplementedError('Livestreams are not supported right now.')
+
+                    self.queue.append(queue_song(video))
+
+                    await self.voice_module.send('Enqueued ' + str(self.queue[-1].song))
+
+            if not self.queue:
+                raise Exception('Something went wrong!')
+
         except Exception as e:
             fmt = 'An error occurred while processing this request: ```py\n{}: {}\n```'
             await self.bot.send_message(channel, fmt.format(type(e).__name__, e))
+            if not self.is_playing():
+                await self.disconnect()
         else:
-            # NOTE: Workaround for weird youtube-dl (or discord.py) bug.
-            # We put song in QueueItem, so we can create new player in audio_player_task().
-            # Here we create and put player only to extract and use metadata.
-            # FIXME: FFMPEG just don't want to go if player was loaded, but wasn't used =\
-            player.start()
-            player.stop()
-
-            song = Song(player.title, requester, player.url, player.uploader, player.is_live, player.duration)
-            item = QueueItem(channel, song)
-            self.queue.append(item)
             self.get_task()
-            return song
 
     def is_playing(self):
-        if self.voice_client is None or self.current.player is None:
+        if self.voice_client is None or self.current is None:
             return False
 
         player = self.current.player
@@ -161,6 +203,7 @@ class VoiceState:
     async def disconnect(self):
         if self.voice_client is not None:
             await self.voice_client.disconnect()
+            self.voice_module.remove_voice_state(self.server)
 
     async def join_channel(self, vc):
         if self.voice_client is None:
@@ -169,25 +212,17 @@ class VoiceState:
             await self.voice_client.move_to(vc)
 
     async def audio_player_task(self):
-        ytdl_opts = {
-            'default_search': 'auto',
-            'quiet': True,
-        }
         try:
             while True:
 
                 self.play_next_song.clear()
                 self.current = self.queue.popleft()
 
-                # NOTE: Workaround for weird youtube-dl (or discord.py) bug.
-                # If our queue has more than 3-4 entries, there's a possibility,
-                # that entries after 2nd or 3rd entry will be invalidated and skipped.
-                self.current.player = await self.voice_client.create_ytdl_player(self.current.song.url, ytdl_options=ytdl_opts, after=self.toggle_next)
+                self.current.player = self.voice_client.create_ffmpeg_player(self.current.song.url, before_options='-xerror', after=self.toggle_next)
                 self.current.player.volume = self.volume
 
                 # We don't need to activate timer if it's a live stream
-                if not self.current.player.is_live:
-                    # Create QueueItem.current_position_timer task and put it in QueueItem.task
+                if not self.current.song.is_live:
                     self.current.song.start_counter()
 
                 self.current.player.start()
@@ -197,13 +232,10 @@ class VoiceState:
 
                 if not self.queue:
                     await self.bot.send_message(self.current.channel, "Queue is empty! Disconnecting...")
-                    self.voice_module.remove_voice_state(self.current.channel.server)
                     await self.disconnect()
                     break
 
         except asyncio.CancelledError:
-            self.voice_module.remove_voice_state(self.current.channel.server)
-            await self.disconnect()
             await self.bot.send_message(self.current.channel, "Player stopped.")
 
 
@@ -227,7 +259,7 @@ class Voice:
     def get_voice_state(self, server):
         state = self.voice_states.get(server.id)
         if state is None:
-            state = VoiceState(self.bot, self)
+            state = VoiceState(self.bot, server, self)
             self.voice_states[server.id] = state
 
         return state
@@ -310,8 +342,7 @@ class Voice:
             sounds = []
             for row in data:
                 sounds.append(row[0])
-            i = randrange(0, len(sounds))
-            snd = sounds[i]
+            snd = choice(sounds)
         else:
             cursor.execute("SELECT * FROM sounds WHERE name=?", (name,))
             row = cursor.fetchone()
@@ -350,21 +381,32 @@ class Voice:
         state.current_sound = None
 
     @commands.command(pass_context=True, name="play-u", no_pm=True)
-    @checks.is_access_allowed(required_level=1)
-    async def play_u(self, ctx, *, song: str):
-        """Plays youtube video. Usage: Kurisu, play-u <url>"""
+    #@checks.is_access_allowed(required_level=1)
+    async def play_u(self, ctx, *, song=''):
+        """Plays video (or yt playlist) from link or file. Usage: Kurisu, play-u <url>"""
 
         state = self.get_voice_state(ctx.message.server)
 
         if state.current_sound is not None:
             return
 
+        if ctx.message.attachments and not song:
+            extension = ctx.message.attachments[0]['filename'][-3:]
+            if extension in ['mp3', 'mp4', 'wav', 'ogg']:
+                song = ctx.message.attachments[0]['url']
+            else:
+                await self.bot.say('Invalid file extension!')
+                return
+
+        if not song:
+            await self.bot.say('Upload or link song!')
+            return
+
         success = await ctx.invoke(self.summon)
         if not success:
             return
 
-        item = await state.play(ctx.message.channel, ctx.message.author, song)
-        await self.send('Enqueued ' + str(item))
+        await state.play(ctx.message.channel, ctx.message.author, song)
 
     @commands.command(pass_context=True, no_pm=True)
     async def skip(self, ctx):
@@ -382,16 +424,17 @@ class Voice:
         await state.skip(channel, voter)
 
     @commands.command(pass_context=True, no_pm=True)
-    @checks.is_access_allowed(required_level=1)
+    #@checks.is_access_allowed(required_level=1)
     async def stop(self, ctx):
         """Stops player and disconnects bot from channel"""
 
         state = self.get_voice_state(ctx.message.server)
 
         state.stop()
+        await state.disconnect()
 
     @commands.command(pass_context=True, no_pm=True)
-    async def volume(self, ctx, value: int):
+    async def volume(self, ctx, value=-1):
         """Sets the volume of the currently playing song."""
 
         state = self.get_voice_state(ctx.message.server)
@@ -400,11 +443,13 @@ class Voice:
             await self.send('Not playing anything.')
             return
 
-        state.change_volume(value)
-        await self.bot.say('Set the volume to {}%'.format(value))
+        if value <= -1:
+            await self.bot.say('Current volume is {}%'.format(state.volume * 100))
+        else:
+            state.change_volume(value)
+            await self.bot.say('Volume has been set to {}%'.format(value))
 
     @commands.command(pass_context=True, no_pm=True)
-    @checks.is_access_allowed(required_level=1)
     async def playing(self, ctx):
         """Shows info about the currently played song."""
 
@@ -428,9 +473,9 @@ class Voice:
 
         songs_queue = []
         count = 1
-        for song in state.queue:
+        for item in state.queue:
             count += 1
-            songs_queue.append("{}. ".format(count) + str(song))
+            songs_queue.append("{}. ".format(count) + str(item.song))
         await self.send("Current queue:\n1. {}\n{}".format(state.current.song, "\n".join(songs_queue)))
 
     @commands.command(pass_context=True, no_pm=True)
@@ -444,7 +489,7 @@ class Voice:
             await self.send('Not playing anything.')
             return
 
-        if len(state.queue) < 2:
+        if len(state.queue) < 1:
             await self.send('Nothing to shuffle. Add more songs.')
         else:
             shuffle(state.queue)

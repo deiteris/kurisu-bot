@@ -94,7 +94,7 @@ class Mod:
         print("Setting permissions for {} to: {}".format(member.name, str(access)))
 
         for channel in server.channels:
-            if channel.type is channel.type.text:
+            if channel.type is discord.ChannelType.text:
                 # Set perms for each channel
                 try:
                     await self.bot.edit_channel_permissions(channel, member, overwrites_text)
@@ -127,12 +127,15 @@ class Mod:
     # Commands
     @commands.command(pass_context=True)
     @checks.is_access_allowed(required_level=2)
-    async def mute(self, ctx, user: str, seconds=0):
-        """Mute for specific time"""
+    async def mute(self, ctx, user: str, period=''):
+        """Mute for specific time."""
 
-        if seconds < 0:
-            await self.bot.say("Invalid amount of time.")
-            return
+        amount = 0
+        if period:
+            amount = int(period[:-1])
+            if amount < 0:
+                await self.bot.say("Invalid amount of time.")
+                return
 
         server = ctx.message.server
 
@@ -140,7 +143,7 @@ class Mod:
         if not commands.bot_has_permissions(manage_roles=True):
             await self.bot.say("I'm not able to manage permissions without `Manage Roles` permission.")
             return
-        elif not not commands.bot_has_permissions(mute_members=True):
+        elif not commands.bot_has_permissions(mute_members=True):
             await self.bot.say("I'm not able to mute voice without `Mute Members` permission.")
 
         members = await utils.get_members(self.bot, ctx.message, user)
@@ -157,14 +160,28 @@ class Mod:
         # Set permissions
         await self.set_permissions(server, member, False)
 
-        if seconds > 0:
+        if amount:
+
+            multiplier = period[-1] if period[-1] in ('s', 'm', 'h', 'd', 'y') else 's'
+
+            def multiply_time(m, secs):
+                return {
+                    m == 's': secs * 1,
+                    m == 'm': secs * 60,
+                    m == 'h': secs * 60 * 60,
+                    m == 'd': secs * 60 * 60 * 24,
+                    m == 'y': secs * 60 * 60 * 24 * 365,
+                }[True]
+
+            period = multiply_time(multiplier, amount)
+
             # Set unmute timer
-            unmute_timer = self.bot.loop.create_task(self.unmute_timer(server, member, seconds))
+            unmute_timer = self.bot.loop.create_task(self.unmute_timer(server, member, period))
             self.timers_storage[server.id].update({member.id: unmute_timer})
 
             # Write muted member to database
             db = self.bot.db
-            values = (member.id, member.name, seconds, server.id)
+            values = (member.id, member.name, period, server.id)
             db.execute("INSERT INTO mutes(member_id, member_name, mute_time, server_id) VALUES (?,?,strftime('%s','now') + ?,?)", values)
             db.commit()
 
@@ -173,10 +190,10 @@ class Mod:
                     1 <= secs < 60: '{} second(s)'.format(secs),
                     60 <= secs < 3600: '{0[0]} minute(s) {0[1]} second(s)'.format(divmod(secs, 60)),
                     3600 <= secs < 86400: '{0[0]} hour(s) {0[1]} minute(s)'.format(divmod(secs, 60 * 60)),
-                    86400 <= secs < 604800: '{0[0]} day(s) {0[1]} hour(s)'.format(divmod(secs, 60 * 60 * 24)),
+                    86400 <= secs: '{0[0]} day(s) {0[1]} hour(s)'.format(divmod(secs, 60 * 60 * 24)),
                 }[True]
 
-            mute_time = convert_time(seconds)
+            mute_time = convert_time(period)
 
             await self.send("Member {} has been muted for {}".format(member.name, mute_time))
         else:
@@ -208,8 +225,8 @@ class Mod:
 
         # Remove mute task for a member and remove him from database
         if member.id in self.timers_storage[server.id]:
-            self.remove_muted_member(member, server)
             self.timers_storage[server.id][member.id].cancel()
+            self.remove_muted_member(member, server)
 
         await self.send("Member {} has been unmuted by command.".format(member.name))
 

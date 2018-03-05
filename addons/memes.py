@@ -1,6 +1,6 @@
 from addons import utils
 from discord.ext import commands
-from random import randrange
+from random import choice
 
 
 class Memes:
@@ -53,8 +53,7 @@ class Memes:
             memes = []
             for row in data:
                 memes.append(row[1])
-            i = randrange(0, len(memes))
-            meme = memes[i]
+            meme = choice(memes)
         else:
             cursor.execute("SELECT * FROM memes WHERE name=?", (name,))
             row = cursor.fetchone()
